@@ -10,6 +10,7 @@
 #include "ClassFlowAlignment.h"
 #include "ClassFlowCNNGeneral.h"
 #include "ClassFlowPostProcessing.h"
+#include "ClassFlowHomeAssistant.h"
 
 #ifdef ENABLE_MQTT
 #include "ClassFlowMQTT.h"
@@ -48,6 +49,7 @@ class ClassFlowControl : public ClassFlow
     ClassFlowCNNGeneral *flowanalog;
     ClassFlowCNNGeneral *flowdigit;
     ClassFlowPostProcessing *flowpostprocessing;
+    ClassFlowHomeAssistant *flowHomeAssistant;
 #ifdef ENABLE_MQTT
     ClassFlowMQTT *flowMQTT;
 #endif // ENABLE_MQTT

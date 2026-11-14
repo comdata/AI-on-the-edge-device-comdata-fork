@@ -1,0 +1,56 @@
+name: Build firmware with Home Assistant API (esp32cam)
+
+on:
+  push:
+    branches:
+      - 'ha-api*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup python environment
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO environment
+        run: |
+          python -m pip install --upgrade pip
+          pip install markdown
+          pip install --upgrade platformio
+
+      - name: Build firmware
+        run: cd code && platformio run -e esp32cam
+
+      - name: Prepare firmware package
+        run: |
+          rm -rf ./artifact
+          mkdir -p ./artifact
+          cp -f ./code/.pio/build/esp32cam/firmware.bin ./artifact/firmware.bin
+          cp -f ./code/.pio/build/esp32cam/bootloader.bin ./artifact/bootloader.bin
+          cp -f ./code/.pio/build/esp32cam/partitions.bin ./artifact/partitions.bin
+          cp -f ./docs/Installation/DeviceReadme/esp32cam.md ./artifact/README.md
+          if [ -d "./sd-card/html_compiled" ]; then
+              cp -r ./sd-card/html_compiled ./artifact/html
+          else
+              cp -r ./sd-card/html ./artifact/html
+          fi
+          mkdir -p ./artifact/config
+          mkdir -p ./artifact/config/templates
+          mkdir -p ./artifact/config/models
+          cp ./sd-card/config/templates/* ./artifact/config/templates/ 2>/dev/null || true
+          cp ./sd-card/config/homeassistant.json.dist ./artifact/config/ 2>/dev/null || true
+          cp ./sd-card/config/models/*.tfl ./artifact/config/models/ 2>/dev/null || true
+          cp ./sd-card/config/models/*.tflite ./artifact/config/models/ 2>/dev/null || true
+
+      - name: Upload firmware package
+        uses: actions/upload-artifact@v7
+        with:
+          name: aioe-ha-api-esp32cam
+          path: ./artifact
+          retention-days: 14
