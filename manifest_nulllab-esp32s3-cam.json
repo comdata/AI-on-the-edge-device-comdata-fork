@@ -11,5 +11,5 @@
                 { "path": "firmware/nulllab-esp32s3-cam/firmware.bin", "offset": 65536 }
             ]
         }
-    }
+    ]
 }
