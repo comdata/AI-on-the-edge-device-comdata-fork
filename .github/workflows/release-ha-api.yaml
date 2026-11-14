@@ -1,0 +1,65 @@
+name: Release firmware (esp32cam)
+
+# Builds the ESP32CAM firmware and attaches it to a GitHub release, so the
+# device's own OTA feature (/api/v1/ota/check + /api/v1/ota/install) finds it
+# as asset of the latest release.
+
+on:
+  push:
+    tags:
+      - 'ha-api-*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup python environment
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO environment
+        run: |
+          python -m pip install --upgrade pip
+          pip install markdown
+          pip install --upgrade platformio
+
+      - name: Build firmware
+        run: cd code && platformio run -e esp32cam
+
+      - name: Prepare firmware package
+        run: |
+          rm -rf pack
+          mkdir -p pack/config/templates pack/config/models
+          cp -f code/.pio/build/esp32cam/firmware.bin pack/
+          cp -f code/.pio/build/esp32cam/bootloader.bin pack/
+          cp -f code/.pio/build/esp32cam/partitions.bin pack/
+          cp -f docs/Installation/DeviceReadme/esp32cam.md pack/README.md
+          cp -r sd-card/html pack/html
+          cp sd-card/config/templates/* pack/config/templates/ 2>/dev/null || true
+          cp sd-card/config/models/*.tflite pack/config/models/ 2>/dev/null || true
+          cp sd-card/config/homeassistant.json.dist pack/config/ 2>/dev/null || true
+          cd pack
+          zip -r "../AI-on-the-edge-device__esp32cam__SLFork_${GITHUB_REF_NAME}.zip" . > /dev/null
+          cd ..
+          ls -l ./*.zip
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          ASSET="AI-on-the-edge-device__esp32cam__SLFork_${TAG}.zip"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --clobber
+          else
+            gh release create "$TAG" "$ASSET" --title "$TAG" \
+              --notes "ESP32CAM firmware built from $GITHUB_SHA. Home Assistant API publishing, image API and the mobile Astro UI."
+          fi

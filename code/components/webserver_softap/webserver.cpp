@@ -8,6 +8,8 @@
 #include <esp_wifi.h>
 #include <esp_private/esp_clk.h>
 #include <cJSON.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #ifdef TASK_ANALYSIS_ON
 #include "psram.h"
@@ -19,6 +21,8 @@
 #include "ClassLogFile.h"
 #include "server_file.h"
 #include "server_help.h"
+#include "server_ota.h"
+#include "github_ota.h"
 #include "time_sntp.h"
 #include "network_main.h"
 #include "connect_wlan.h"
@@ -674,6 +678,106 @@ esp_err_t handler_main(httpd_req_t *req)
 }
 
 
+
+
+// GitHub release based OTA
+//   GET /api/v1/ota/check[?repo=owner/name]   -> JSON with current/latest release
+//   GET /api/v1/ota/install[?repo=owner/name] -> download asset of the latest release and reboot into it
+static void otaInstallTask(void *parameter)
+{
+    doRebootOTA();
+    vTaskDelete(NULL);
+}
+
+
+static std::string otaRepoFromRequest(httpd_req_t *req)
+{
+    char query[160] = {0};
+    char repo[96] = {0};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        if (httpd_query_key_value(query, "repo", repo, sizeof(repo)) == ESP_OK) {
+            return std::string(repo);
+        }
+    }
+    return "";
+}
+
+
+static void otaSendInfo(httpd_req_t *req, const GitHubOtaInfo &info, bool checked, const std::string &action)
+{
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddBoolToObject(json, "success", checked);
+    cJSON_AddStringToObject(json, "action", action.c_str());
+    cJSON_AddStringToObject(json, "repo", info.repo.c_str());
+    cJSON_AddStringToObject(json, "current", info.currentVersion.c_str());
+    cJSON_AddStringToObject(json, "latest", info.latestTag.c_str());
+    cJSON_AddStringToObject(json, "name", info.releaseName.c_str());
+    cJSON_AddStringToObject(json, "notes", info.notes.c_str());
+    cJSON_AddStringToObject(json, "asset", info.assetName.c_str());
+    cJSON_AddStringToObject(json, "installed", info.installedTag.c_str());
+    cJSON_AddBoolToObject(json, "update_available", info.updateAvailable);
+    if (!info.error.empty()) {
+        cJSON_AddStringToObject(json, "error", info.error.c_str());
+    }
+
+    char *out = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, out ? out : "{}");
+    if (out) {
+        cJSON_free(out);
+    }
+}
+
+
+esp_err_t handler_ota_check(httpd_req_t *req)
+{
+    GitHubOtaInfo info;
+    bool ok = githubOtaCheck(info, otaRepoFromRequest(req));
+    if (!ok) {
+        httpd_resp_set_status(req, "502 Bad Gateway");
+    }
+    otaSendInfo(req, info, ok, "check");
+    return ESP_OK;
+}
+
+
+esp_err_t handler_ota_install(httpd_req_t *req)
+{
+    GitHubOtaInfo info;
+    if (!githubOtaCheck(info, otaRepoFromRequest(req))) {
+        httpd_resp_set_status(req, "502 Bad Gateway");
+        otaSendInfo(req, info, false, "install");
+        return ESP_OK;
+    }
+
+    esp_err_t err = githubOtaDownload(info);
+    if (err != ESP_OK) {
+        info.error = "Download failed: " + std::string(esp_err_to_name(err));
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        otaSendInfo(req, info, false, "install");
+        return ESP_OK;
+    }
+
+    // Queue the update for the next boot (same mechanism as the WebUI OTA)
+    FILE *updateFile = fopen("/sdcard/update.txt", "w");
+    if (updateFile == NULL) {
+        info.error = "Cannot queue the update (update.txt)";
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        otaSendInfo(req, info, false, "install");
+        return ESP_OK;
+    }
+    fputs(GITHUB_OTA_ZIP_PATH, updateFile);
+    fclose(updateFile);
+
+    githubOtaRememberPendingTag(info.latestTag);
+    otaSendInfo(req, info, true, "install");
+
+    // Reboot after the answer has been sent
+    xTaskCreate(&otaInstallTask, "otaInstallTask", 4096, NULL, tskIDLE_PRIORITY + 2, NULL);
+    return ESP_OK;
+}
+
 httpd_handle_t startWebserver(void)
 {
     httpd_handle_t server = NULL;
@@ -682,7 +786,7 @@ httpd_handle_t startWebserver(void)
     config.stack_size = 10240;
     config.core_id = 1;
     config.max_open_sockets = 5;    // With default value 7: Error "httpd_accept_conn: error in accept"
-    config.max_uri_handlers = 26;   // Max number of URI handler
+    config.max_uri_handlers = 30;   // Max number of URI handler
     config.lru_purge_enable = true; // Cut old connections if new ones are needed
     config.uri_match_fn = httpd_uri_match_wildcard;
 
@@ -723,6 +827,16 @@ void registerWebserverUri(httpd_handle_t server, const char *basePath)
     camuri.uri = "/info";
     camuri.handler = HTTP_AUTH_BASIC(handler_get_info);
     camuri.user_ctx = httpServerData; // Pass server data as context
+    httpd_register_uri_handler(server, &camuri);
+
+    camuri.uri = "/api/v1/ota/check";
+    camuri.handler = HTTP_AUTH_BASIC(handler_ota_check);
+    camuri.user_ctx = httpServerData;
+    httpd_register_uri_handler(server, &camuri);
+
+    camuri.uri = "/api/v1/ota/install";
+    camuri.handler = HTTP_AUTH_BASIC(handler_ota_install);
+    camuri.user_ctx = httpServerData;
     httpd_register_uri_handler(server, &camuri);
 
     camuri.uri = "/api/v1/image";

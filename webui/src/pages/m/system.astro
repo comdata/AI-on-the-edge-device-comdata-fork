@@ -16,8 +16,24 @@ import Layout from '../../layouts/Layout.astro';
     </div>
   </section>
 
+
   <section class="card">
-    <h2>Firmware-Update</h2>
+    <h2>Update von GitHub</h2>
+    <p class="hint">Prüft die neueste Veröffentlichung im Firmware-Repository und installiert sie direkt auf dem Gerät.</p>
+    <div class="grid" style="margin-top:10px">
+      <div class="kv"><div class="k">Installiert</div><div class="v" id="ota-installed">–</div></div>
+      <div class="kv"><div class="k">Neueste</div><div class="v" id="ota-latest">–</div></div>
+    </div>
+    <p class="hint" id="ota-notes" style="margin-top:10px"></p>
+    <div class="btn-row" style="margin-top:10px">
+      <button class="btn" id="btn-ota-check">Nach Update suchen</button>
+      <button class="btn primary" id="btn-ota-install" disabled>Installieren</button>
+    </div>
+    <p class="hint" id="ota-state"></p>
+  </section>
+
+  <section class="card">
+    <h2>Firmware-Update (Datei)</h2>
     <p class="hint">ZIP- oder BIN-Datei aus dem Release-Paket (z. B. <code>AI-on-the-edge-device__esp32cam__*.zip</code>). Das Gerät startet danach neu.</p>
     <label class="field" style="margin-top:10px">
       <span>Datei</span>
@@ -111,6 +127,54 @@ import Layout from '../../layouts/Layout.astro';
     }
   };
 
+
+  const otaState = (text, bad = false) => {
+    $('ota-state').textContent = text;
+    $('ota-state').className = `hint ${bad ? 'error' : ''}`;
+  };
+
+  const otaCheck = async () => {
+    otaState('Prüfe GitHub-Release …');
+    try {
+      const response = await fetch('/api/v1/ota/check', { cache: 'no-store' });
+      const data = await response.json();
+      $('ota-installed').textContent = data.installed || data.current || '–';
+      $('ota-latest').textContent = data.latest || '–';
+      $('ota-notes').textContent = data.notes || '';
+      if (!data.success) {
+        otaState(data.error || 'Prüfung fehlgeschlagen', true);
+        $('btn-ota-install').disabled = true;
+        return;
+      }
+      $('btn-ota-install').disabled = !data.update_available;
+      otaState(data.update_available ? `Update verfügbar: ${data.latest}` : 'Gerät ist auf dem neuesten Stand');
+    } catch (error) {
+      otaState('Gerät antwortet nicht', true);
+    }
+  };
+
+  $('btn-ota-check').onclick = otaCheck;
+
+  $('btn-ota-install').onclick = async () => {
+    if (!confirm('Update jetzt von GitHub installieren? Das Gerät startet dabei neu.')) return;
+    $('btn-ota-install').disabled = true;
+    otaState('Lade Firmware vom Release …');
+    try {
+      const response = await fetch('/api/v1/ota/install', { cache: 'no-store' });
+      const data = await response.json();
+      if (!data.success) {
+        otaState(data.error || 'Installation fehlgeschlagen', true);
+        $('btn-ota-install').disabled = false;
+        return;
+      }
+      otaState(`${data.asset} wird installiert, Gerät startet neu …`);
+      toast('Update installiert, Neustart läuft');
+      setTimeout(() => window.location.reload(), 60000);
+    } catch (error) {
+      otaState('Installation abgebrochen (Gerät startet neu)', true);
+    }
+  };
+
   $('btn-check').onclick = checkVersion;
 
   $('btn-discovery').onclick = async () => {
@@ -153,4 +217,5 @@ import Layout from '../../layouts/Layout.astro';
 
   loadInfo();
   checkVersion();
+  otaCheck();
 </script>
