@@ -13,7 +13,14 @@
 #include "ClassLogFile.h"
 #include "helper.h"
 #include "time_sntp.h"
-#include "../../main/version.h"
+
+// The firmware version is provided by version.h, which must only be included
+// once in the whole firmware (it defines functions). Declare the symbols here.
+extern "C" {
+extern const char *GIT_TAG;
+extern const char *GIT_REV;
+extern const char *GIT_BRANCH;
+}
 
 
 static const char *TAG = "GITHUB_OTA";
