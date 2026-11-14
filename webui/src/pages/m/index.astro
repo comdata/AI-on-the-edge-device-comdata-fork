@@ -1,0 +1,141 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+<Layout title="Übersicht" active="overview">
+  <section class="card">
+    <h2>Zählerstand</h2>
+    <div class="value"><span id="value">–</span><span class="unit">m³</span></div>
+    <p class="small muted" id="status">Status wird geladen…</p>
+    <div class="grid" style="margin-top:12px">
+      <div class="kv"><div class="k">Durchfluss</div><div class="v" id="rate">–</div></div>
+      <div class="kv"><div class="k">Zuletzt verarbeitet</div><div class="v" id="processed">–</div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Letztes Bild</h2>
+    <div class="image-wrap">
+      <img id="shot" alt="Letztes Kamerabild des Zählers" src="/api/v1/image?type=aligned" />
+    </div>
+    <p class="hint" id="shot-hint">Bild der letzten Messung</p>
+  </section>
+
+  <section class="card">
+    <h2>Gerät</h2>
+    <div class="grid">
+      <div class="kv"><div class="k">Prozess</div><div class="v" id="process">–</div></div>
+      <div class="kv"><div class="k">Messintervall</div><div class="v" id="interval">–</div></div>
+      <div class="kv"><div class="k">Laufzeit</div><div class="v" id="uptime">–</div></div>
+      <div class="kv"><div class="k">WLAN</div><div class="v" id="rssi">–</div></div>
+      <div class="kv"><div class="k">Messzyklen</div><div class="v" id="cycles">–</div></div>
+      <div class="kv"><div class="k">Firmware</div><div class="v" id="firmware">–</div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Aktionen</h2>
+    <div class="btn-row">
+      <button class="btn primary" id="btn-cycle">Messung starten</button>
+      <button class="btn" id="btn-reload">Konfiguration neu laden</button>
+    </div>
+    <div class="btn-row" style="margin-top:10px">
+      <button class="btn" id="btn-image">Bild aktualisieren</button>
+      <button class="btn danger" id="btn-reboot">Neustart</button>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  import { getJson, get, duration, sequenceValue, toast } from '../../lib/api.js';
+
+  const $ = (id) => document.getElementById(id);
+
+  const loadImage = () => {
+    const img = $('shot');
+    img.src = `/api/v1/image?type=aligned&t=${Date.now()}`;
+  };
+
+  const render = (process) => {
+    const value = sequenceValue(process, 'actual_value');
+    const status = sequenceValue(process, 'value_status') || '–';
+    const rate = Number(sequenceValue(process, 'rate_per_minute') || 0) * 60;
+
+    $('value').textContent = value ?? '–';
+    $('status').textContent = status;
+    $('status').className = `small ${String(status).startsWith('000') ? 'ok' : 'error'}`;
+    $('rate').textContent = `${rate.toFixed(3)} m³/h`;
+    $('processed').textContent = String(sequenceValue(process, 'timestamp_processed') || '–').replace('T', ' ').replace('+', ' +');
+    $('process').textContent = process.process_status || '–';
+    $('interval').textContent = `${process.process_interval ?? '–'} min`;
+    $('uptime').textContent = duration(process.device_uptime);
+    $('rssi').textContent = `${process.wlan_rssi ?? '–'} dBm`;
+    $('cycles').textContent = process.cycle_counter ?? '–';
+  };
+
+  const refresh = async () => {
+    try {
+      render(await getJson('/process_data'));
+    } catch (error) {
+      $('status').textContent = 'Gerät antwortet nicht';
+      $('status').className = 'small error';
+    }
+  };
+
+  const loadInfo = async () => {
+    try {
+      const info = await getJson('/info');
+      $('firmware').textContent = info.git_tag || '–';
+    } catch (error) {
+      $('firmware').textContent = '–';
+    }
+  };
+
+  $('btn-cycle').onclick = async () => {
+    try {
+      await get('/cycle_start');
+      toast('Messung gestartet');
+      setTimeout(refresh, 4000);
+    } catch (error) {
+      toast('Messung konnte nicht starten', true);
+    }
+  };
+
+  $('btn-reload').onclick = async () => {
+    try {
+      await get('/config?task=reload');
+      toast('Konfiguration wird neu geladen');
+    } catch (error) {
+      toast('Neuladen fehlgeschlagen', true);
+    }
+  };
+
+  $('btn-image').onclick = () => {
+    loadImage();
+    toast('Bild wird aktualisiert');
+  };
+
+  $('btn-reboot').onclick = async () => {
+    if (!confirm('Gerät wirklich neu starten?')) return;
+    try {
+      await get('/reboot');
+      toast('Neustart läuft …');
+    } catch (error) {
+      toast('Neustart fehlgeschlagen', true);
+    }
+  };
+
+  $('shot').addEventListener('error', () => {
+    const img = $('shot');
+    if (!img.dataset.fallback) {
+      img.dataset.fallback = '1';
+      img.src = `/img_tmp/alg_roi.jpg?t=${Date.now()}`;
+      $('shot-hint').textContent = 'Bild über klassischen Endpunkt (ältere Firmware)';
+    }
+  });
+
+  refresh();
+  loadInfo();
+  loadImage();
+  setInterval(refresh, 10000);
+  setInterval(loadImage, 60000);
+</script>

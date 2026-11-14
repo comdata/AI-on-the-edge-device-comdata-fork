@@ -1,0 +1,73 @@
+---
+import '../styles/app.css';
+
+const { title = 'AI on the Edge', active = '' } = Astro.props;
+
+const tabs = [
+  { id: 'overview', href: '/m.html', label: 'Übersicht', icon: 'M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z' },
+  { id: 'image', href: '/m/image.html', label: 'Bild', icon: 'M4 6h3l2-2h6l2 2h3v14H4V6Zm8 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Z' },
+  { id: 'config', href: '/m/config.html', label: 'Konfig', icon: 'M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Zm8-5.2 1.7 1.4-1.7 3-2.1-.6a7.6 7.6 0 0 1-1.6 1l-.4 2.2h-3.4l-.4-2.2a7.6 7.6 0 0 1-1.6-1l-2.1.6-1.7-3L5 10.3V9.7l-1.7-1.4 1.7-3 2.1.6a7.6 7.6 0 0 1 1.6-1L9.1 2.7h3.4l.4 2.2a7.6 7.6 0 0 1 1.6 1l2.1-.6 1.7 3L16.6 9.7v.6Z' },
+  { id: 'logs', href: '/m/logs.html', label: 'Protokoll', icon: 'M5 3h9l5 5v13H5V3Zm4 9h7v2H9v-2Zm0 4h7v2H9v-2Zm0-8h4v2H9V8Z' },
+  { id: 'system', href: '/m/system.html', label: 'System', icon: 'M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm8.4 4 2 1.6-2 3.4-2.4-.7a8 8 0 0 1-1.8 1l-.5 2.5h-4l-.5-2.5a8 8 0 0 1-1.8-1l-2.4.7-2-3.4L3.6 12l-2-1.6 2-3.4 2.4.7a8 8 0 0 1 1.8-1l.5-2.5h4l.5 2.5a8 8 0 0 1 1.8 1l2.4-.7 2 3.4L20.4 12Z' },
+];
+---
+
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="theme-color" content="#0b7285" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#101418" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>{title} · AI on the Edge</title>
+  </head>
+  <body>
+    <header class="appbar">
+      <h1>{title}</h1>
+      <span class="spacer"></span>
+      <span class="pill" id="connection-pill">verbinde…</span>
+    </header>
+
+    <main>
+      <slot />
+    </main>
+
+    <nav class="tabbar" aria-label="Hauptnavigation">
+      {
+        tabs.map((tab) => (
+          <a href={tab.href} aria-current={active === tab.id ? 'page' : undefined}>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d={tab.icon} />
+            </svg>
+            {tab.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <script>
+      // One tiny shared poller so every page shows whether the device answers.
+      const pill = document.getElementById('connection-pill');
+      const paint = (text, state) => {
+        if (!pill) return;
+        pill.textContent = text;
+        pill.className = `pill ${state}`;
+      };
+      const check = async () => {
+        try {
+          const response = await fetch('/info', { cache: 'no-store' });
+          if (!response.ok) throw new Error(String(response.status));
+          const info = await response.json();
+          paint(info.connection_status === 'Connected' ? 'online' : 'offline', info.connection_status === 'Connected' ? 'ok' : 'warn');
+        } catch (error) {
+          paint('keine Verbindung', 'err');
+        }
+      };
+      check();
+      setInterval(check, 15000);
+    </script>
+  </body>
+</html>

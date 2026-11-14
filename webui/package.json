@@ -1,0 +1,15 @@
+{
+  "name": "aioe-webui",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Mobile-first web UI for the AI on the Edge device (Astro, static build into sd-card/html)",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "astro": "^7.4.12"
+  }
+}

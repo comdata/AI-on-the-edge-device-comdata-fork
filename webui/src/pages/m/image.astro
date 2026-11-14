@@ -1,0 +1,74 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+<Layout title="Bild" active="image">
+  <section class="card">
+    <h2>Kamerabild</h2>
+    <div class="image-wrap">
+      <img id="shot" alt="Kamerabild des Zählers" src="/api/v1/image?type=aligned" />
+    </div>
+    <p class="hint" id="hint">Bild der letzten Messung mit Messbereichen</p>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn" data-type="aligned">Letzte Messung</button>
+      <button class="btn" data-type="reference">Referenzbild</button>
+    </div>
+    <div class="btn-row" style="margin-top:10px">
+      <button class="btn primary" data-type="raw">Neu aufnehmen (Blitz)</button>
+      <button class="btn" id="btn-download">Herunterladen</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Erweiterte Bearbeitung</h2>
+    <p class="hint">Ausrichtung, Marker und Messbereiche bearbeiten – klassische Seiten (für Feinjustage am Rechner).</p>
+    <div class="list" style="margin-top:10px">
+      <a class="item" href="/edit_alignment.html">Ausrichtung &amp; Marker</a>
+      <a class="item" href="/edit_reference.html">Referenzbild</a>
+      <a class="item" href="/edit_sequence.html">Messbereiche (Sequenz)</a>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  import { toast } from '../../lib/api.js';
+
+  const $ = (id) => document.getElementById(id);
+  const labels = {
+    aligned: 'Bild der letzten Messung mit Messbereichen',
+    reference: 'Referenzbild der Ausrichtung',
+    raw: 'Neue Aufnahme mit Blitz',
+  };
+
+  let currentType = 'aligned';
+
+  const load = (type) => {
+    currentType = type;
+    $('hint').textContent = labels[type] || '';
+    $('shot').src = `/api/v1/image?type=${type}&t=${Date.now()}`;
+  };
+
+  document.querySelectorAll('[data-type]').forEach((button) => {
+    button.onclick = () => {
+      load(button.dataset.type);
+      if (button.dataset.type === 'raw') toast('Neue Aufnahme wird erstellt');
+    };
+  });
+
+  $('btn-download').onclick = () => {
+    const link = document.createElement('a');
+    link.href = `/api/v1/image?type=${currentType}&t=${Date.now()}`;
+    link.download = `aioe-${currentType}.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  $('shot').addEventListener('error', () => {
+    const img = $('shot');
+    if (!img.dataset.fallback) {
+      img.dataset.fallback = '1';
+      img.src = `/img_tmp/alg_roi.jpg?t=${Date.now()}`;
+      $('hint').textContent = 'Klassischer Endpunkt (ältere Firmware)';
+    }
+  });
+</script>

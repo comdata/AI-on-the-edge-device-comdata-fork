@@ -586,6 +586,35 @@ esp_err_t handler_img_tmp(httpd_req_t *req)
 }
 
 
+// Stable image API for external clients (Home Assistant, scripts, the mobile UI):
+// /api/v1/image?type=aligned|raw|reference
+//   aligned   - image of the last processed cycle incl. regions of interest (default, no flash)
+//   raw       - new capture with flashlight (same as /img_tmp/raw.jpg)
+//   reference - the configured reference image
+esp_err_t handler_image_api(httpd_req_t *req)
+{
+    char query[64] = {0};
+    char value[16] = {0};
+    std::string imageType = "aligned";
+
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        if (httpd_query_key_value(query, "type", value, sizeof(value)) == ESP_OK) {
+            imageType = std::string(value);
+        }
+    }
+
+    ESP_LOGD(TAG, "Image API request: %s", imageType.c_str());
+
+    if (imageType == "raw") {
+        return cameraCtrl.captureToHTTP(req);
+    }
+    if (imageType == "reference") {
+        return sendFile(req, "/sdcard/config/reference.jpg");
+    }
+    return flowctrl.sendProcessImages(req, "alg_roi.jpg");
+}
+
+
 esp_err_t handler_main(httpd_req_t *req)
 {
     if (req->uri[0] == '\0') {
@@ -653,7 +682,7 @@ httpd_handle_t startWebserver(void)
     config.stack_size = 10240;
     config.core_id = 1;
     config.max_open_sockets = 5;    // With default value 7: Error "httpd_accept_conn: error in accept"
-    config.max_uri_handlers = 24;   // Max number of URI handler
+    config.max_uri_handlers = 26;   // Max number of URI handler
     config.lru_purge_enable = true; // Cut old connections if new ones are needed
     config.uri_match_fn = httpd_uri_match_wildcard;
 
@@ -694,6 +723,11 @@ void registerWebserverUri(httpd_handle_t server, const char *basePath)
     camuri.uri = "/info";
     camuri.handler = HTTP_AUTH_BASIC(handler_get_info);
     camuri.user_ctx = httpServerData; // Pass server data as context
+    httpd_register_uri_handler(server, &camuri);
+
+    camuri.uri = "/api/v1/image";
+    camuri.handler = HTTP_AUTH_BASIC(handler_image_api);
+    camuri.user_ctx = httpServerData;
     httpd_register_uri_handler(server, &camuri);
 
     camuri.uri = "/img_tmp/*";

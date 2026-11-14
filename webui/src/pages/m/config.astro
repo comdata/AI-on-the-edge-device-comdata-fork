@@ -1,0 +1,199 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+<Layout title="Konfiguration" active="config">
+  <section class="card">
+    <h2>Konfiguration</h2>
+    <p class="small muted" id="state">Wird geladen…</p>
+    <div class="btn-row" style="margin-top:10px">
+      <button class="btn primary" id="btn-save" disabled>Speichern</button>
+      <button class="btn" id="btn-reload">Neu laden</button>
+    </div>
+  </section>
+
+  <div id="sections"></div>
+
+  <section class="card">
+    <h2>Erweitert</h2>
+    <div class="list">
+      <a class="item" href="/m/config.html" id="link-raw" hidden>–</a>
+      <a class="item" href="/edit_config_param.html">Parameter-Editor (klassisch)</a>
+      <a class="item" href="/edit_alignment.html">Ausrichtung &amp; Marker</a>
+      <a class="item" href="/edit_sequence.html">Messbereiche</a>
+    </div>
+    <p class="hint" style="margin-top:10px">
+      Änderungen werden als Teilkonfiguration an <code>POST /config</code> gesendet; das Gerät übernimmt sie sofort.
+    </p>
+  </section>
+</Layout>
+
+<script>
+  import { getJson, postJson, get, toast } from '../../lib/api.js';
+
+  const $ = (id) => document.getElementById(id);
+  const sectionsRoot = $('sections');
+  const saveButton = $('btn-save');
+  const state = $('state');
+
+  const patch = {};
+  let config = {};
+
+  const label = (key) =>
+    String(key)
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/_/g, ' ')
+      .replace(/^./, (c) => c.toUpperCase());
+
+  const record = (path, value) => {
+    let node = patch;
+    path.slice(0, -1).forEach((key) => {
+      node[key] = node[key] || {};
+      node = node[key];
+    });
+    node[path[path.length - 1]] = value;
+    saveButton.disabled = false;
+    state.textContent = 'Ungespeicherte Änderungen';
+    state.className = 'small error';
+  };
+
+  const textInput = (path, key, value) => {
+    const wrap = document.createElement('label');
+    wrap.className = 'field';
+    const caption = document.createElement('span');
+    caption.textContent = label(key);
+    const input = document.createElement('input');
+    input.type = typeof value === 'number' ? 'number' : 'text';
+    if (typeof value === 'number') input.step = 'any';
+    input.value = value;
+    if (value === '******') {
+      input.placeholder = 'unverändert';
+      input.dataset.secret = '1';
+    }
+    input.addEventListener('change', () => {
+      if (input.dataset.secret && input.value === '******') return;
+      record(path, typeof value === 'number' ? Number(input.value) : input.value);
+    });
+    wrap.append(caption, input);
+    return wrap;
+  };
+
+  const switchInput = (path, key, value) => {
+    const wrap = document.createElement('label');
+    wrap.className = 'field';
+    const row = document.createElement('div');
+    row.className = 'row';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = Boolean(value);
+    input.addEventListener('change', () => record(path, input.checked));
+    const caption = document.createElement('span');
+    caption.className = 'grow';
+    caption.textContent = label(key);
+    row.append(input, caption);
+    wrap.append(row);
+    return wrap;
+  };
+
+  const jsonInput = (path, key, value) => {
+    const wrap = document.createElement('label');
+    wrap.className = 'field';
+    const caption = document.createElement('span');
+    caption.textContent = `${label(key)} (JSON)`;
+    const area = document.createElement('textarea');
+    area.value = JSON.stringify(value, null, 2);
+    area.spellcheck = false;
+    area.addEventListener('change', () => {
+      try {
+        record(path, JSON.parse(area.value));
+        area.classList.remove('error');
+      } catch (error) {
+        area.classList.add('error');
+        toast(`${label(key)}: kein gültiges JSON`, true);
+      }
+    });
+    wrap.append(caption, area);
+    return wrap;
+  };
+
+  const renderObject = (parent, object, path) => {
+    Object.entries(object).forEach(([key, value]) => {
+      const childPath = [...path, key];
+      if (value === null) return;
+      if (typeof value === 'boolean') {
+        parent.append(switchInput(childPath, key, value));
+      } else if (typeof value === 'number' || typeof value === 'string') {
+        parent.append(textInput(childPath, key, value));
+      } else if (Array.isArray(value) || typeof value === 'object') {
+        if (Array.isArray(value)) {
+          parent.append(jsonInput(childPath, key, value));
+        } else {
+          const details = document.createElement('details');
+          details.className = 'section';
+          const summary = document.createElement('summary');
+          summary.textContent = label(key);
+          const body = document.createElement('div');
+          body.className = 'section-body';
+          renderObject(body, value, childPath);
+          details.append(summary, body);
+          parent.append(details);
+        }
+      }
+    });
+  };
+
+  const render = (data) => {
+    config = data;
+    sectionsRoot.textContent = '';
+    Object.entries(data).forEach(([section, values]) => {
+      if (section === 'config' || values === null || typeof values !== 'object') return;
+      const card = document.createElement('section');
+      card.className = 'card';
+      const heading = document.createElement('h2');
+      heading.textContent = label(section);
+      card.append(heading);
+      const details = document.createElement('details');
+      details.className = 'section';
+      details.open = ['operationmode', 'takeimage', 'postprocessing', 'mqtt', 'webui'].includes(section);
+      const body = document.createElement('div');
+      body.className = 'section-body';
+      renderObject(body, values, [section]);
+      details.append(body);
+      card.append(details);
+      sectionsRoot.append(card);
+    });
+    state.textContent = `Geladen: ${new Date().toLocaleTimeString()}`;
+    state.className = 'small muted';
+    saveButton.disabled = true;
+  };
+
+  const load = async () => {
+    try {
+      render(await getJson('/config'));
+    } catch (error) {
+      state.textContent = 'Konfiguration konnte nicht geladen werden';
+      state.className = 'small error';
+    }
+  };
+
+  saveButton.onclick = async () => {
+    if (Object.keys(patch).length === 0) return;
+    saveButton.disabled = true;
+    try {
+      await postJson('/config', patch);
+      Object.keys(patch).forEach((key) => delete patch[key]);
+      toast('Konfiguration gespeichert');
+      await load();
+    } catch (error) {
+      toast('Speichern fehlgeschlagen', true);
+      saveButton.disabled = false;
+    }
+  };
+
+  $('btn-reload').onclick = async () => {
+    await load();
+    toast('Konfiguration neu geladen');
+  };
+
+  $('link-raw').hidden = true;
+  load();
+</script>

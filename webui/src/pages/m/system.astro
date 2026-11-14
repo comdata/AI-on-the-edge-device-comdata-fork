@@ -1,0 +1,156 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+<Layout title="System" active="system">
+  <section class="card">
+    <h2>Gerät</h2>
+    <div class="grid">
+      <div class="kv"><div class="k">Firmware</div><div class="v" id="git-tag">–</div></div>
+      <div class="kv"><div class="k">Board</div><div class="v" id="board">–</div></div>
+      <div class="kv"><div class="k">Hostname</div><div class="v" id="hostname">–</div></div>
+      <div class="kv"><div class="k">IP</div><div class="v" id="ip">–</div></div>
+      <div class="kv"><div class="k">Laufzeit</div><div class="v" id="uptime">–</div></div>
+      <div class="kv"><div class="k">Freier Heap</div><div class="v" id="heap">–</div></div>
+      <div class="kv"><div class="k">WLAN</div><div class="v" id="wlan">–</div></div>
+      <div class="kv"><div class="k">SD-Karte</div><div class="v" id="sd">–</div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Firmware-Update</h2>
+    <p class="hint">ZIP- oder BIN-Datei aus dem Release-Paket (z. B. <code>AI-on-the-edge-device__esp32cam__*.zip</code>). Das Gerät startet danach neu.</p>
+    <label class="field" style="margin-top:10px">
+      <span>Datei</span>
+      <input type="file" id="fw-file" accept=".zip,.bin" />
+    </label>
+    <div class="btn-row">
+      <button class="btn primary" id="btn-upload" disabled>Hochladen &amp; installieren</button>
+      <button class="btn" id="btn-check">Version prüfen</button>
+    </div>
+    <p class="hint" id="fw-state"></p>
+  </section>
+
+  <section class="card">
+    <h2>Wartung</h2>
+    <div class="btn-row">
+      <button class="btn" id="btn-discovery">HA-Discovery senden</button>
+      <button class="btn" id="btn-reload-config">Konfiguration neu laden</button>
+    </div>
+    <div class="btn-row" style="margin-top:10px">
+      <button class="btn" id="btn-fallback">Fallback = Rohwert</button>
+      <button class="btn danger" id="btn-reboot">Neustart</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Klassische Oberfläche</h2>
+    <div class="list">
+      <a class="item" href="/info.html">Systeminformationen</a>
+      <a class="item" href="/edit_reference.html">Referenzbild</a>
+      <a class="item" href="/edit_alignment.html">Ausrichtung</a>
+      <a class="item" href="/data_viewer.html">Messwertverlauf</a>
+      <a class="item" href="/doc_api_rest.html">REST-API</a>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  import { getJson, get, toast, duration } from '../../lib/api.js';
+
+  const $ = (id) => document.getElementById(id);
+
+  const loadInfo = async () => {
+    try {
+      const info = await getJson('/info');
+      $('git-tag').textContent = info.git_tag || '–';
+      $('board').textContent = info.board_type || '–';
+      $('hostname').textContent = info.hostname || '–';
+      $('ip').textContent = info.ipv4_address || '–';
+      $('uptime').textContent = duration(info.device_uptime);
+      $('heap').textContent = `${Math.round((info.heap_total_free || 0) / 1024)} kB`;
+      $('wlan').textContent = `${info.wlan_ssid || '–'} (${info.wlan_rssi || '–'} dBm)`;
+      $('sd').textContent = `${info.sd_partition_free || '–'} MB frei`;
+    } catch (error) {
+      toast('Geräteinformationen nicht erreichbar', true);
+    }
+  };
+
+  const checkVersion = async () => {
+    try {
+      $('fw-state').textContent = `Installiert: ${await get('/info?type=firmware_version')}`;
+    } catch (error) {
+      $('fw-state').textContent = 'Version nicht lesbar';
+    }
+  };
+
+  $('fw-file').addEventListener('change', () => {
+    $('btn-upload').disabled = !$('fw-file').files.length;
+  });
+
+  $('btn-upload').onclick = async () => {
+    const file = $('fw-file').files[0];
+    if (!file) return;
+    if (!confirm(`Firmware "${file.name}" jetzt installieren? Das Gerät startet neu.`)) return;
+
+    const name = file.name;
+    $('btn-upload').disabled = true;
+    $('fw-state').textContent = 'Lade hoch …';
+    try {
+      await get('/ota?task=emptyfirmwaredir');
+      const response = await fetch(`/upload/firmware/${name}`, { method: 'POST', body: file });
+      if (!response.ok) throw new Error(String(response.status));
+      $('fw-state').textContent = 'Installation vorbereiten …';
+      await get(`/ota?task=update&file=${encodeURIComponent(name)}`);
+      $('fw-state').textContent = 'Gerät startet neu und installiert …';
+      setTimeout(() => get('/reboot').catch(() => {}), 2000);
+      toast('Update läuft, Gerät startet neu');
+    } catch (error) {
+      $('fw-state').textContent = `Update fehlgeschlagen (${error.message})`;
+      toast('Update fehlgeschlagen', true);
+      $('btn-upload').disabled = false;
+    }
+  };
+
+  $('btn-check').onclick = checkVersion;
+
+  $('btn-discovery').onclick = async () => {
+    try {
+      await get('/mqtt?task=publish_ha_discovery');
+      toast('Discovery wird gesendet');
+    } catch (error) {
+      toast('Discovery fehlgeschlagen', true);
+    }
+  };
+
+  $('btn-reload-config').onclick = async () => {
+    try {
+      await get('/config?task=reload');
+      toast('Konfiguration wird neu geladen');
+    } catch (error) {
+      toast('Neuladen fehlgeschlagen', true);
+    }
+  };
+
+  $('btn-fallback').onclick = async () => {
+    if (!confirm('Aktuellen Rohwert als letzten gültigen Wert übernehmen?')) return;
+    try {
+      await get('/set_fallbackvalue?sequence=main&value=-1');
+      toast('Fallback auf Rohwert gesetzt');
+    } catch (error) {
+      toast('Fallback setzen fehlgeschlagen', true);
+    }
+  };
+
+  $('btn-reboot').onclick = async () => {
+    if (!confirm('Gerät wirklich neu starten?')) return;
+    try {
+      await get('/reboot');
+      toast('Neustart läuft …');
+    } catch (error) {
+      toast('Neustart fehlgeschlagen', true);
+    }
+  };
+
+  loadInfo();
+  checkVersion();
+</script>

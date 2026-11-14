@@ -1,0 +1,73 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+<Layout title="Protokoll" active="logs">
+  <section class="card">
+    <h2>Dateien</h2>
+    <p class="small muted">Meldungsprotokolle des Geräts (neueste zuerst).</p>
+    <div class="list" id="files" style="margin-top:10px"><span class="hint">Lade …</span></div>
+  </section>
+
+  <section class="card">
+    <h2>Ausgabe</h2>
+    <div class="btn-row" style="margin-bottom:10px">
+      <button class="btn" id="btn-current">Aktueller Lauf</button>
+      <button class="btn" id="btn-refresh">Aktualisieren</button>
+    </div>
+    <pre class="log" id="log">Wähle eine Datei …</pre>
+  </section>
+</Layout>
+
+<script>
+  import { getText, toast } from '../../lib/api.js';
+
+  const $ = (id) => document.getElementById(id);
+  const list = $('files');
+  const log = $('log');
+  const base = '/fileserver/log/message/';
+
+  const show = async (path, title) => {
+    log.textContent = 'Lade …';
+    try {
+      const text = await getText(path);
+      log.textContent = text || '(leer)';
+      log.scrollTop = 0;
+      toast(title);
+    } catch (error) {
+      log.textContent = `Konnte ${path} nicht laden`;
+    }
+  };
+
+  const renderList = async () => {
+    try {
+      const html = await getText(`${base}?readonly=true`);
+      const names = [...new Set([...html.matchAll(/log_[0-9-]+\.txt/g)].map((m) => m[0]))].sort().reverse();
+      list.textContent = '';
+      if (names.length === 0) {
+        list.innerHTML = '<span class="hint">Keine Dateien gefunden</span>';
+        return;
+      }
+      names.slice(0, 10).forEach((name) => {
+        const link = document.createElement('a');
+        link.className = 'item';
+        link.href = '#';
+        link.textContent = name.replace('log_', '').replace('.txt', '');
+        link.onclick = (event) => {
+          event.preventDefault();
+          show(`${base}${name}`, name);
+        };
+        list.append(link);
+      });
+    } catch (error) {
+      list.innerHTML = '<span class="hint error">Verzeichnis nicht lesbar</span>';
+    }
+  };
+
+  $('btn-current').onclick = () => show('/log?type=full', 'Aktueller Lauf');
+  $('btn-refresh').onclick = () => {
+    renderList();
+    toast('Liste aktualisiert');
+  };
+
+  renderList();
+</script>
