@@ -56,15 +56,27 @@ struct DownloadContext {
     FILE *file = NULL;
     size_t written = 0;
     bool writeFailed = false;
+    std::string location; // Location header of a redirect
 };
 
 
 static esp_err_t downloadEventHandler(esp_http_client_event_t *event)
 {
-    if (event->event_id != HTTP_EVENT_ON_DATA || event->data == NULL || event->data_len <= 0) {
+    if (event->user_data == NULL) {
         return ESP_OK;
     }
     DownloadContext *context = (DownloadContext *)event->user_data;
+
+    if (event->event_id == HTTP_EVENT_ON_HEADER && event->header_key != NULL && event->header_value != NULL) {
+        if (strcasecmp(event->header_key, "Location") == 0) {
+            context->location = event->header_value;
+        }
+        return ESP_OK;
+    }
+
+    if (event->event_id != HTTP_EVENT_ON_DATA || event->data == NULL || event->data_len <= 0) {
+        return ESP_OK;
+    }
     if (context == NULL || context->file == NULL) {
         return ESP_FAIL;
     }
@@ -315,12 +327,8 @@ static int downloadAttempt(const std::string &url, DownloadContext &context, std
     esp_err_t err = esp_http_client_perform(client);
     int status = (err == ESP_OK) ? esp_http_client_get_status_code(client) : -1;
 
-    if (status >= 300 && status < 400) {
-        char *header = NULL;
-        if (esp_http_client_get_header(client, "Location", &header) == ESP_OK && header != NULL) {
-            location = header;
-        }
-    }
+    // The Location header is captured by the event handler
+    location = context.location;
 
     esp_http_client_cleanup(client);
 
