@@ -52,6 +52,31 @@ static esp_err_t apiEventHandler(esp_http_client_event_t *event)
 }
 
 
+struct DownloadContext {
+    FILE *file = NULL;
+    size_t written = 0;
+    bool writeFailed = false;
+};
+
+
+static esp_err_t downloadEventHandler(esp_http_client_event_t *event)
+{
+    if (event->event_id != HTTP_EVENT_ON_DATA || event->data == NULL || event->data_len <= 0) {
+        return ESP_OK;
+    }
+    DownloadContext *context = (DownloadContext *)event->user_data;
+    if (context == NULL || context->file == NULL) {
+        return ESP_FAIL;
+    }
+    if (fwrite(event->data, 1, event->data_len, context->file) != (size_t)event->data_len) {
+        context->writeFailed = true;
+        return ESP_FAIL;
+    }
+    context->written += event->data_len;
+    return ESP_OK;
+}
+
+
 static esp_err_t httpGetToString(const std::string &url, std::string &result, const char *accept)
 {
     ApiResponse response;
@@ -277,6 +302,13 @@ esp_err_t githubOtaDownload(const GitHubOtaInfo &info)
 
     deleteFile(GITHUB_OTA_ZIP_PATH);
 
+    FILE *file = fopen(GITHUB_OTA_ZIP_PATH, "wb");
+    if (file == NULL) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Cannot write " GITHUB_OTA_ZIP_PATH);
+        return ESP_FAIL;
+    }
+
+    DownloadContext context = {file, 0, false};
     esp_http_client_config_t config = {};
     config.url = info.assetUrl.c_str();
     config.user_agent = "AI-on-the-Edge Device";
@@ -285,81 +317,45 @@ esp_err_t githubOtaDownload(const GitHubOtaInfo &info)
     config.buffer_size = DOWNLOAD_BUFFER;
     config.crt_bundle_attach = esp_crt_bundle_attach;
     config.max_redirection_count = 5;
+    // Data is written from the event handler: esp_http_client_perform follows
+    // the GitHub redirect to the asset host, esp_http_client_open would not.
+    config.event_handler = downloadEventHandler;
+    config.user_data = &context;
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (client == NULL) {
+        fclose(file);
         return ESP_ERR_NO_MEM;
     }
     esp_http_client_set_header(client, "Accept", "application/octet-stream");
 
-    esp_err_t err = esp_http_client_open(client, 0);
+    esp_err_t err = esp_http_client_perform(client);
+    int status = esp_http_client_get_status_code(client);
+    esp_http_client_cleanup(client);
+    fclose(file);
+
     if (err != ESP_OK) {
-        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Download open failed: " + std::string(esp_err_to_name(err)));
-        esp_http_client_cleanup(client);
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Download failed: " + std::string(esp_err_to_name(err)));
+        deleteFile(GITHUB_OTA_ZIP_PATH);
         return err;
     }
-
-    int64_t contentLength = esp_http_client_fetch_headers(client);
-    int status = esp_http_client_get_status_code(client);
     if (status != 200) {
         LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Download failed with HTTP " + std::to_string(status));
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
+        deleteFile(GITHUB_OTA_ZIP_PATH);
         return ESP_ERR_INVALID_RESPONSE;
     }
-
-    FILE *file = fopen(GITHUB_OTA_ZIP_PATH, "wb");
-    if (file == NULL) {
-        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Cannot write " GITHUB_OTA_ZIP_PATH);
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
+    if (context.writeFailed) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Write to SD card failed");
+        deleteFile(GITHUB_OTA_ZIP_PATH);
         return ESP_FAIL;
     }
-
-    char buffer[DOWNLOAD_BUFFER];
-    size_t written = 0;
-    while (true) {
-        int read = esp_http_client_read(client, buffer, sizeof(buffer));
-        if (read < 0) {
-            LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Download read error");
-            fclose(file);
-            esp_http_client_close(client);
-            esp_http_client_cleanup(client);
-            deleteFile(GITHUB_OTA_ZIP_PATH);
-            return ESP_FAIL;
-        }
-        if (read == 0) {
-            break;
-        }
-        if (fwrite(buffer, 1, read, file) != (size_t)read) {
-            LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Write to SD card failed");
-            fclose(file);
-            esp_http_client_close(client);
-            esp_http_client_cleanup(client);
-            deleteFile(GITHUB_OTA_ZIP_PATH);
-            return ESP_FAIL;
-        }
-        written += read;
-    }
-
-    fclose(file);
-    esp_http_client_close(client);
-    esp_http_client_cleanup(client);
-
-    if (contentLength > 0 && written != (size_t)contentLength) {
-        LogFile.writeToFile(ESP_LOG_ERROR, TAG,
-                            "Incomplete download: " + std::to_string(written) + " of " + std::to_string(contentLength) + " bytes");
-        deleteFile(GITHUB_OTA_ZIP_PATH);
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    if (written < 1024) {
+    if (context.written < 1024) {
         LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Downloaded file is implausibly small");
         deleteFile(GITHUB_OTA_ZIP_PATH);
         return ESP_ERR_INVALID_SIZE;
     }
 
     LogFile.writeToFile(ESP_LOG_INFO, TAG,
-                        "Downloaded " + info.assetName + " (" + std::to_string(written) + " bytes) to " GITHUB_OTA_ZIP_PATH);
+                        "Downloaded " + info.assetName + " (" + std::to_string(context.written) + " bytes) to " GITHUB_OTA_ZIP_PATH);
     return ESP_OK;
 }
