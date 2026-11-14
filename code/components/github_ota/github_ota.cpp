@@ -56,6 +56,7 @@ struct DownloadContext {
     FILE *file = NULL;
     size_t written = 0;
     bool writeFailed = false;
+    size_t expected = 0;  // Content-Length of the final answer
     std::string location; // Location header of a redirect
 };
 
@@ -340,6 +341,7 @@ static int downloadAttempt(const std::string &url, DownloadContext &context, std
 
     int64_t contentLength = esp_http_client_fetch_headers(client);
     int status = esp_http_client_get_status_code(client);
+    context.expected = (contentLength > 0) ? (size_t)contentLength : 0;
     location = context.location;
     LogFile.writeToFile(ESP_LOG_INFO, TAG,
                         "Status " + std::to_string(status) + ", length: " + std::to_string(contentLength) +
@@ -371,6 +373,36 @@ static int downloadAttempt(const std::string &url, DownloadContext &context, std
         LogFile.writeToFile(ESP_LOG_DEBUG, TAG, "Redirect to: " + location);
     }
     return status;
+}
+
+
+// A release asset must be complete before the device replaces its own files:
+// check the size against Content-Length and look for the end-of-central-directory
+// record of a ZIP archive.
+static bool downloadIsComplete(const DownloadContext &context)
+{
+    if (context.written < 512 * 1024) {
+        return false;
+    }
+    if (context.expected > 0 && context.written != context.expected) {
+        return false;
+    }
+
+    FILE *file = fopen(GITHUB_OTA_ZIP_PATH, "rb");
+    if (file == NULL) {
+        return false;
+    }
+    fseek(file, 0, SEEK_END);
+    long size = ftell(file);
+    long tail = (size > 66000) ? 66000 : size;
+    std::string buffer;
+    buffer.resize(tail);
+    fseek(file, size - tail, SEEK_SET);
+    size_t read = fread(&buffer[0], 1, tail, file);
+    fclose(file);
+
+    const std::string eocd("PK\x05\x06", 4);
+    return buffer.find(eocd) != std::string::npos;
 }
 
 
@@ -426,8 +458,10 @@ esp_err_t githubOtaDownload(const GitHubOtaInfo &info)
         deleteFile(GITHUB_OTA_ZIP_PATH);
         return ESP_FAIL;
     }
-    if (context.written < 1024) {
-        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Downloaded file is implausibly small");
+    if (!downloadIsComplete(context)) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG,
+                            "Download incomplete: " + std::to_string(context.written) + " of " +
+                                std::to_string(context.expected) + " bytes, no ZIP end record");
         deleteFile(GITHUB_OTA_ZIP_PATH);
         return ESP_ERR_INVALID_SIZE;
     }
