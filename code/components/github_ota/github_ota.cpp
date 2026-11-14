@@ -311,6 +311,9 @@ static int downloadAttempt(const std::string &url, DownloadContext &context, std
     config.method = HTTP_METHOD_GET;
     config.timeout_ms = 30000;
     config.buffer_size = DOWNLOAD_BUFFER;
+    // The signed asset URL of a GitHub release is longer than the default TX
+    // buffer (1024), which makes the request fail before it is sent.
+    config.buffer_size_tx = 4096;
     config.crt_bundle_attach = esp_crt_bundle_attach;
     config.event_handler = downloadEventHandler;
     config.user_data = &context;
