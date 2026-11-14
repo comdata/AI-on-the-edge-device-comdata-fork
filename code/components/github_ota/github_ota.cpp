@@ -312,29 +312,52 @@ static int downloadAttempt(const std::string &url, DownloadContext &context, std
     config.timeout_ms = 30000;
     config.buffer_size = DOWNLOAD_BUFFER;
     config.crt_bundle_attach = esp_crt_bundle_attach;
-    // Handle the redirect to the asset host ourselves: the location is needed
-    // for the next attempt and the body of a redirect must not be written.
-    config.disable_auto_redirect = true;
     config.event_handler = downloadEventHandler;
     config.user_data = &context;
 
+    context.location.clear();
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (client == NULL) {
         return -1;
     }
     esp_http_client_set_header(client, "Accept", "application/octet-stream");
 
-    esp_err_t err = esp_http_client_perform(client);
-    int status = (err == ESP_OK) ? esp_http_client_get_status_code(client) : -1;
+    esp_err_t err = esp_http_client_open(client, 0);
+    if (err != ESP_OK) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Open failed: " + std::string(esp_err_to_name(err)) + " (" +
+                                                     std::to_string((int)err) + ")");
+        esp_http_client_cleanup(client);
+        return -1;
+    }
 
-    // The Location header is captured by the event handler
+    esp_http_client_fetch_headers(client);
+    int status = esp_http_client_get_status_code(client);
     location = context.location;
 
+    if (status == 200) {
+        char buffer[DOWNLOAD_BUFFER];
+        while (true) {
+            int read = esp_http_client_read(client, buffer, sizeof(buffer));
+            if (read < 0) {
+                context.writeFailed = true;
+                break;
+            }
+            if (read == 0) {
+                break;
+            }
+            if (fwrite(buffer, 1, read, context.file) != (size_t)read) {
+                context.writeFailed = true;
+                break;
+            }
+            context.written += read;
+        }
+    }
+
+    esp_http_client_close(client);
     esp_http_client_cleanup(client);
 
-    if (err != ESP_OK) {
-        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Request failed: " + std::string(esp_err_to_name(err)) +
-                                                     " (" + std::to_string((int)err) + ")");
+    if (status >= 300 && status < 400) {
+        LogFile.writeToFile(ESP_LOG_DEBUG, TAG, "Redirect to: " + location);
     }
     return status;
 }
