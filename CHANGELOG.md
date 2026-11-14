@@ -1,5 +1,12 @@
 # Changelog
 
+## [18.0.1-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.0.0-comdataFork...v18.0.1-comdataFork) (2026-11-14)
+
+
+### Refactoring / Style Changes
+
+* rename fork branding from SLFork to comdataFork ([9a9bf34](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/9a9bf3403a957a4be128543eda5e134384465969))
+
 ## [18.0.0-SLFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v17.4.1-SLFork...v18.0.0-SLFork) (2026-11-14)
 
 
