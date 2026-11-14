@@ -99,3 +99,43 @@ curl -u aiote:<password> "http://<device>/reboot"
 The device unpacks the zip on boot, flashes `firmware.bin` and reboots again.
 Keep the previous release zip at hand: a self-built firmware that does not boot
 can only be recovered over USB.
+
+## Image API
+
+The device serves its images through a stable endpoint, so Home Assistant and
+scripts do not have to know the internal file names:
+
+| Request | Answer |
+|---|---|
+| `GET /api/v1/image?type=aligned` | image of the last processed cycle with the regions of interest (default, no flash) |
+| `GET /api/v1/image?type=raw` | new capture **with flashlight** (same as `/img_tmp/raw.jpg`) |
+| `GET /api/v1/image?type=reference` | the configured reference image |
+
+The endpoint uses the same HTTP Basic auth as the rest of the API. Point the
+Home Assistant *Generic camera* at it:
+
+```yaml
+still_image_url: http://10.0.1.20/api/v1/image?type=aligned
+username: aiote
+password: <device password>
+```
+
+## Mobile web UI (Astro)
+
+`webui/` contains the new mobile-first interface, built with Astro into
+`sd-card/html` (`index.html`, `m.html`, `m/*.html`, `_astro/*`):
+
+```bash
+cd webui
+npm install
+npm run build          # writes webui/dist
+# then copy dist/index.html, dist/m.html, dist/m/ and dist/_astro/ into sd-card/html/
+```
+
+Pages: **Übersicht** (values, live image, actions), **Bild** (last/aligned,
+reference, raw capture), **Konfig** (complete `/config` editor generated from
+the JSON, booleans as switches, arrays as JSON), **Protokoll** (log files and
+current run), **System** (device facts, OTA update, HA discovery, fallback
+value, reboot). The classic pages stay reachable (e.g. the ROI editors, which
+are linked from the new pages) and now carry a viewport meta tag so they are
+usable on a phone as well. The old overview is kept as `index_legacy.html`.
