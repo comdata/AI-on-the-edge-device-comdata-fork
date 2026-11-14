@@ -139,3 +139,20 @@ current run), **System** (device facts, OTA update, HA discovery, fallback
 value, reboot). The classic pages stay reachable (e.g. the ROI editors, which
 are linked from the new pages) and now carry a viewport meta tag so they are
 usable on a phone as well. The old overview is kept as `index_legacy.html`.
+
+## Recovery after a failed OTA
+
+If a device does not come back after an update:
+
+1. Power-cycle it (pull USB/power for ~10 s). The updater only runs once per
+   boot, so a partial extraction is retried from the beginning.
+2. If it still does not appear on the network, take the SD card out and copy
+   the contents of the current release ZIP (`firmware.bin`, `bootloader.bin`,
+   `partitions.bin`, `html/`, `config/`) onto it, then flash `firmware.bin`
+   over USB (`esptool.py -p <port> -b 460800 write_flash 0x10000 firmware.bin`).
+3. `config/config.json` stays untouched by the OTA; delete
+   `config/ota_installed.txt` if the tag is stale.
+
+The GitHub OTA only queues an update when the downloaded file matches the
+`Content-Length` of the answer and contains a ZIP end record, so a truncated
+download cannot replace the running firmware.
