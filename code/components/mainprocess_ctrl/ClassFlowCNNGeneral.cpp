@@ -2,9 +2,7 @@
 #include "../../include/defines.h"
 
 #include <math.h>
-#include <iomanip>
 #include <sys/types.h>
-#include <sstream> // std::stringstream
 
 #include <esp_log.h>
 
@@ -12,6 +10,7 @@
 #include "ClassLogFile.h"
 #include "ClassControlCamera.h"
 #include "CImageMod.h"
+#include "helper.h"
 
 
 static const char *TAG = "CNN";

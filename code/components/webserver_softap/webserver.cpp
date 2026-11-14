@@ -6,6 +6,7 @@
 
 #include <esp_log.h>
 #include <esp_wifi.h>
+#include "esp_heap_caps.h"
 #include <esp_private/esp_clk.h>
 #include <cJSON.h>
 #include <freertos/FreeRTOS.h>
@@ -15,9 +16,10 @@
 #include "psram.h"
 #endif // TASK_ANALYSIS_ON
 
-#include "../main/version.h" // Only include once
+#include "../main/version.h"
 #include "http_auth.h"
 #include "MainFlowControl.h"
+#include "ClassControlCamera.h"
 #include "ClassLogFile.h"
 #include "server_file.h"
 #include "server_help.h"
@@ -44,7 +46,7 @@ extern std::string deviceStartTimestamp;
 
 esp_err_t handler_get_info(httpd_req_t *req)
 {
-    const char *APIName = "info:v4"; // API name and version
+    const char *APIName = "info:v5"; // API name and version
     char _query[200];
     char _valuechar[30];
     std::string type;
@@ -161,6 +163,9 @@ esp_err_t handler_get_info(httpd_req_t *req)
         if (cJSON_AddNumberToObject(cJSONObject, "wlan_channel", getWifiChannel()) == NULL) {
             retVal = ESP_FAIL;
         }
+        if (cJSON_AddNumberToObject(cJSONObject, "wifi_powersaving", getWifiPowerSavingEnabled()) == NULL) {
+            retVal = ESP_FAIL;
+        }
         if (cJSON_AddStringToObject(cJSONObject, "mac_address", getMac().c_str()) == NULL) {
             retVal = ESP_FAIL;
         }
@@ -248,22 +253,13 @@ esp_err_t handler_get_info(httpd_req_t *req)
         if (cJSON_AddNumberToObject(cJSONObject, "heap_spiram_min_free", getESPHeapSizeSPIRAMMinFree()) == NULL) {
             retVal = ESP_FAIL;
         }
-        if (cJSON_AddStringToObject(cJSONObject, "git_branch", libfive_git_branch()) == NULL) {
-            retVal = ESP_FAIL;
-        }
-        if (cJSON_AddStringToObject(cJSONObject, "git_tag", libfive_git_version()) == NULL) {
-            retVal = ESP_FAIL;
-        }
-        if (cJSON_AddStringToObject(cJSONObject, "git_revision", libfive_git_revision()) == NULL) {
-            retVal = ESP_FAIL;
-        }
         if (cJSON_AddStringToObject(cJSONObject, "firmware_version", getFwVersion().c_str()) == NULL) {
             retVal = ESP_FAIL;
         }
-        if (cJSON_AddStringToObject(cJSONObject, "html_version", getHTMLversion().c_str()) == NULL) {
+        if (cJSON_AddStringToObject(cJSONObject, "html_version", getWebUiVersion().c_str()) == NULL) {
             retVal = ESP_FAIL;
         }
-        if (cJSON_AddStringToObject(cJSONObject, "build_time", build_time()) == NULL) {
+        if (cJSON_AddStringToObject(cJSONObject, "build_time", getBuildTime().c_str()) == NULL) {
             retVal = ESP_FAIL;
         }
         if (cJSON_AddNumberToObject(cJSONObject, "config_version", getConfigVersion()) == NULL) {
@@ -389,6 +385,10 @@ esp_err_t handler_get_info(httpd_req_t *req)
     }
     else if (type.compare("wlan_channel") == 0) {
         httpd_resp_sendstr(req, std::to_string(getWifiChannel()).c_str());
+        return ESP_OK;
+    }
+    else if (type.compare("wifi_powersaving") == 0) {
+        httpd_resp_sendstr(req, std::to_string(getWifiPowerSavingEnabled()).c_str());
         return ESP_OK;
     }
     else if (type.compare("mac_address") == 0) {
@@ -531,28 +531,16 @@ esp_err_t handler_get_info(httpd_req_t *req)
         return ESP_FAIL;
     }
 #endif // TASK_ANALYSIS_ON
-    else if (type.compare("git_branch") == 0) {
-        httpd_resp_sendstr(req, libfive_git_branch());
-        return ESP_OK;
-    }
-    else if (type.compare("git_tag") == 0) {
-        httpd_resp_sendstr(req, libfive_git_version());
-        return ESP_OK;
-    }
-    else if (type.compare("git_revision") == 0) {
-        httpd_resp_sendstr(req, libfive_git_revision());
-        return ESP_OK;
-    }
     else if (type.compare("firmware_version") == 0) {
         httpd_resp_sendstr(req, getFwVersion().c_str());
         return ESP_OK;
     }
     else if (type.compare("html_version") == 0) {
-        httpd_resp_sendstr(req, getHTMLversion().c_str());
+        httpd_resp_sendstr(req, getWebUiVersion().c_str());
         return ESP_OK;
     }
     else if (type.compare("build_time") == 0) {
-        httpd_resp_sendstr(req, build_time());
+        httpd_resp_sendstr(req, getBuildTime().c_str());
         return ESP_OK;
     }
     else if (type.compare("config_version") == 0) {
@@ -625,7 +613,8 @@ esp_err_t handler_main(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid URI");
     }
 
-    const std::string basePath = ((struct HttpServerData *)req->user_ctx)->basePathRoot;
+    const auto *serverData = static_cast<HttpServerData *>(req->user_ctx);
+    const std::string &basePath = serverData->basePathRoot;
     std::string filepath = basePath;
 
     if (strcmp(req->uri, "/") == 0) {
@@ -635,41 +624,78 @@ esp_err_t handler_main(httpd_req_t *req)
         filepath.append("/html").append(req->uri);
 
         // Remove query part from URI if present
-        size_t queryPos = filepath.find('?');
+        const size_t queryPos = filepath.find('?');
         if (queryPos != std::string::npos) {
-            filepath = filepath.substr(0, queryPos);
+            filepath.resize(queryPos);
         }
     }
 
     if (filepath == "/sdcard/html/index.html") {
         // Check if critical errors prevent normal operation
-        if (isSetSystemStatusFlag(SYSTEM_STATUS_PSRAM_BAD) || isSetSystemStatusFlag(SYSTEM_STATUS_HEAP_TOO_SMALL) ||
-            isSetSystemStatusFlag(SYSTEM_STATUS_SDCARD_CHECK_BAD) || isSetSystemStatusFlag(SYSTEM_STATUS_FOLDER_CHECK_BAD)) {
-            LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Critical error(s) occurred, redirect to reduced web interface");
+        constexpr uint32_t CRITICAL_ERROR_MASK = SYSTEM_STATUS_PSRAM_BAD | SYSTEM_STATUS_HEAP_TOO_SMALL | SYSTEM_STATUS_SDCARD_CHECK_BAD |
+                                                 SYSTEM_STATUS_FOLDER_CHECK_BAD;
 
-            std::string message = "<h1>AI on the Edge</h1><b>Critical error(s) occurred, which do not allow to start regular process and "
-                                  "web interface:</b><br>";
+        if (getSystemStatus() & CRITICAL_ERROR_MASK) {
+            LogFile.writeToFile(ESP_LOG_ERROR, TAG,
+                                "Critical errors occurred, preventing the standard process and web interface from starting");
 
-            char buf[20];
-            for (int i = 0; i < 32; i++) {
-                if (isSetSystemStatusFlag((SystemStatusFlag_t)(1 << i))) {
-                    snprintf(buf, sizeof(buf), "0x%08X", 1 << i);
-                    message += std::string(buf) + "<br>";
+            const auto getStatusFlagName = [](uint32_t flag) -> const char * {
+                switch (flag) {
+                    case SYSTEM_STATUS_PSRAM_BAD:
+                        return "PSRAM: Failed Or Missing";
+                    case SYSTEM_STATUS_HEAP_TOO_SMALL:
+                        return "Heap: Memory Too Low";
+                    case SYSTEM_STATUS_SDCARD_CHECK_BAD:
+                        return "SD Card: General Failure";
+                    case SYSTEM_STATUS_FOLDER_CHECK_BAD:
+                        return "SD Card: Missing Files Or Folders";
+                    default:
+                        return "Unknown Error";
+                }
+            };
+
+
+            std::string message;
+            message.reserve(2048);
+
+            // Basic styles
+            message = "<style>body{font-family:Arial;padding:20px;line-height:1.5;}"
+                      "button{margin:5px;padding:10px;cursor:pointer;border-radius:4px;"
+                      "border:1px solid #ccc;background:#f0f0f0;}"
+                      "code{background:#eee;padding:2px 4px;}</style>";
+
+            // Headline
+            message += "<h1>AI-on-the-Edge Device</h1><br>"
+                       "<b>Critical errors occurred, preventing the operational web interface from starting!</b><br><br>"
+                       "<b>Detected Critical Errors:</b><br>";
+
+            // Error codes
+            constexpr uint32_t criticalFlags[] = {SYSTEM_STATUS_PSRAM_BAD, SYSTEM_STATUS_HEAP_TOO_SMALL, SYSTEM_STATUS_SDCARD_CHECK_BAD,
+                                                  SYSTEM_STATUS_FOLDER_CHECK_BAD};
+            char buf[128];
+            for (const uint32_t currentFlag : criticalFlags) {
+                if (isSetSystemStatusFlag(static_cast<SystemStatusFlag_t>(currentFlag))) {
+                    snprintf(buf, sizeof(buf), "<code>0x%08X</code> - %s<br>", static_cast<unsigned>(currentFlag),
+                             getStatusFlagName(currentFlag));
+                    message += buf;
                 }
             }
 
-            message += "<br>Please check logs with \'Log Viewer\' and/or <a "
-                       "href=\"https://jomjol.github.io/AI-on-the-edge-device-docs/Error-Codes\" "
-                       "target=_blank>jomjol.github.io/AI-on-the-edge-device-docs/Error-Codes</a> for more information.";
-            message += "<br><br><button onclick=\"window.location.href='/reboot';\">Reboot</button>";
-            message += "&nbsp;<button onclick=\"window.open('/ota_page.html');\">OTA Update</button>";
-            message += "&nbsp;<button onclick=\"window.open('/log.html');\">Log Viewer</button>";
-            message += "&nbsp;<button onclick=\"window.open('/info.html');\">Show System Info</button>";
-            httpd_resp_send(req, message.c_str(), message.length());
+            // Info and buttons
+            message +=
+                "<br><a href=\"https://github.com/Slider0007/AI-on-the-edge-device/blob/develop/docs/Troubleshooting/Reduced_WebUI.md\" "
+                "target=\"_blank\">Error Documentation</a>.<br><br>";
+            message += "<button onclick=\"window.location.href='/reboot';\">Reboot Device</button>";
+            message += "&nbsp;<button onclick=\"window.open('/sys_log.html');\">Log Viewer</button>";
+            message += "&nbsp;<button onclick=\"window.open('/sys_ota.html');\">OTA Update</button>";
+            message += "&nbsp;<button onclick=\"window.open('/fileserver/');\">File Explorer</button>";
+            message += "&nbsp;<button onclick=\"window.open('/sys_info.html');\">System Info</button>";
+            httpd_resp_send(req, message.c_str(), HTTPD_RESP_USE_STRLEN);
             return ESP_OK;
         }
-        else if (flowctrl.getStatusSetupModus()) { // If in setup mode, redirect to setup page
-            ESP_LOGD(TAG, "System is in setup mode. Redirect from index.html --> setup.html");
+
+        if (flowctrl.getStatusSetupModus()) {
+            LogFile.writeToFile(ESP_LOG_INFO, TAG, "System is in setup mode. Redirect from index.html --> setup.html");
             filepath = "/sdcard/html/setup.html";
         }
     }
@@ -791,11 +817,17 @@ httpd_handle_t startWebserver(void)
     config.uri_match_fn = httpd_uri_match_wildcard;
 
     ESP_LOGI(TAG, "Starting webserver on port: '%d'", config.server_port);
-    if (httpd_start(&server, &config) == ESP_OK) {
+    esp_err_t ret = httpd_start(&server, &config);
+    if (ret == ESP_OK) {
         return server;
     }
+    else if (ret == ESP_ERR_HTTPD_HANDLERS_FULL) {
+        ESP_LOGE(TAG, "Failed to start webserver | Error: URI handlers exhausted (max configured: %d)", config.max_uri_handlers);
+    }
+    else {
+        ESP_LOGE(TAG, "Failed to start webserver | Error: 0x%X", ret);
+    }
 
-    ESP_LOGE(TAG, "Failed to start webserver");
     return NULL;
 }
 

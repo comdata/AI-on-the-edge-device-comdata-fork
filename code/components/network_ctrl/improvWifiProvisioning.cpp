@@ -17,13 +17,13 @@
 #include <freertos/event_groups.h>
 #include <freertos/task.h>
 
+#include "../main/version.h"
 #include "improvWifi.h"
 #include "network_main.h"
 #include "connect_wlan.h"
 #include "configClass.h"
 #include "ClassLogFile.h"
 #include "system.h"
-#include "server_ota.h"
 #include "softAP.h"
 #include "helper.h"
 
@@ -42,8 +42,6 @@ static const int uartBufferSize = 2 * evtBufferSize;
 static const int evtBufferSize = 256;
 #endif // BOARD_FEATURE_USB
 uint8_t evtData[evtBufferSize];
-
-extern std::string getFwVersion(void);
 
 
 static void improvEventHandler(void)

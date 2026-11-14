@@ -7,15 +7,15 @@
 #include <esp_log.h>
 #include <esp_private/esp_clk.h>
 
+#include "../main/version.h"
 #include "http_auth.h"
 #include "system.h"
 #include "ClassFlowDefineTypes.h"
+#include "ClassControlCamera.h"
 #include "MainFlowControl.h"
 #include "network_main.h"
 #include "connect_wlan.h"
-
-extern std::string getFwVersion(void);
-
+#include "helper.h"
 
 static const char *TAG = "OPENMETRICS";
 

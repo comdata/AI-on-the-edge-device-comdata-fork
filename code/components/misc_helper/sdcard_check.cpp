@@ -6,7 +6,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <unistd.h>
-#include <inttypes.h>
 #include <sys/stat.h>
 
 #include "esp_rom_crc.h"
@@ -101,12 +100,6 @@ bool checkSdCardFolderFilePresence()
     /* check if folder exists: html */
     if (stat("/sdcard/html", &sb) != 0) {
         LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Folder/file check: Folder /html not found");
-        bRetval = false;
-    }
-
-    /* check if folder exists: firmware */
-    if (stat("/sdcard/firmware", &sb) != 0) {
-        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Folder/file check: Folder /firmware not found");
         bRetval = false;
     }
 

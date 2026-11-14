@@ -37,7 +37,6 @@ enum TlsServerCertVerification {
 enum AlignmentAlgo {
     ALIGNALGO_ROTATE_AND_ALIGN_SAD_1CH = 0,
     ALIGNALGO_ROTATE_AND_ALIGN_SAD_3CH = 1,
-    ALIGNALGO_ROTATE_AND_ALIGN_SAD_1CH_SIMILAR = 2,
     ALIGNALGO_ROTATION_ONLY = 3,
     ALIGNALGO_OFF = 4,
 };
@@ -105,6 +104,14 @@ enum GpioSmartledType {
 enum NetworkIpConfig {
     NETWORK_IP_CONFIG_DHCP = 0,
     NETWORK_IP_CONFIG_STATIC = 1,
+};
+
+
+enum WifiPowerMode {
+    WIFI_POWERSAVING_DISABLED = 0,
+    WIFI_POWERSAVING_WAKEUP_BY_DTIM = 1,
+    WIFI_POWERSAVING_WAKEUP_BY_INTERVAL = 2,
+    WIFI_POWERSAVING_MAX,
 };
 
 
@@ -202,6 +209,14 @@ struct GpioElement {
 };
 
 
+struct TLSParams {
+    uint8_t serverCertVerification = TLS_SERVER_CERT_VERIFICATION_FULL;
+    std::string caCert = "";
+    std::string clientCert = "";
+    std::string clientKey = "";
+};
+
+
 //************************************************
 // MAIN CONFIG STRUCT
 // ----------------------------------------------
@@ -210,7 +225,7 @@ struct GpioElement {
 struct CfgData {
     // Config File
     struct SectionConfig {
-        int version = 6; // NOTE: Increment when existing parameter name changed and add migration routine
+        int version = 9; // NOTE: Increment whenever existing parameter names changed or any migration is required
         std::string lastModified = "";
     } sectionConfig;
 
@@ -224,7 +239,7 @@ struct CfgData {
     // Take Image
     struct SectionTakeImage {
         struct Flashlight {
-            int flashTime = 2000;
+            int flashTime = 1000;
             int flashIntensity = 50;
         } flashlight;
         struct Camera {
@@ -298,6 +313,7 @@ struct CfgData {
     struct SectionAnalog {
         bool enabled = true;
         std::string model = "ana-class100_0201_s1_q.tflite"; // with extention, but without path
+        float cnnGoodThreshold = 0.80;                       // placeholder: not in use
         std::vector<RoiPerSequence> sequence;
         struct Debug {
             bool saveRoiImages = false;
@@ -327,12 +343,7 @@ struct CfgData {
         int authMode = AUTH_NONE;
         std::string username = "";
         std::string password = "";
-        struct TLS {
-            uint8_t serverCertVerification = TLS_SERVER_CERT_VERIFICATION_FULL;
-            std::string caCert = "";
-            std::string clientCert = "";
-            std::string clientKey = "";
-        } tls;
+        TLSParams tls;
         int processDataNotation = PROCESSDATA_JSON;
         bool retainProcessData = false;
         struct HomeAssistant {
@@ -352,12 +363,7 @@ struct CfgData {
         int authMode = AUTH_NONE;
         std::string username = "";
         std::string password = "";
-        struct TLS {
-            uint8_t serverCertVerification = TLS_SERVER_CERT_VERIFICATION_FULL;
-            std::string caCert = "";
-            std::string clientCert = "";
-            std::string clientKey = "";
-        } tls;
+        TLSParams tls;
         std::vector<InfluxDBPerSequence> sequence;
     } sectionInfluxDBv1;
 
@@ -369,12 +375,7 @@ struct CfgData {
         std::string organization = "";
         int authMode = AUTH_BASIC; // AUTH_BASIC: Tokenized authentication
         std::string token = "";
-        struct TLS {
-            uint8_t serverCertVerification = TLS_SERVER_CERT_VERIFICATION_FULL;
-            std::string caCert = "";
-            std::string clientCert = "";
-            std::string clientKey = "";
-        } tls;
+        TLSParams tls;
         std::vector<InfluxDBPerSequence> sequence;
     } sectionInfluxDBv2;
 
@@ -387,12 +388,7 @@ struct CfgData {
         int authMode = AUTH_NONE;
         std::string username = "";
         std::string password = "";
-        struct TLS {
-            uint8_t serverCertVerification = TLS_SERVER_CERT_VERIFICATION_FULL;
-            std::string caCert = "";
-            std::string clientCert = "";
-            std::string clientKey = "";
-        } tls;
+        TLSParams tls;
     } sectionWebhook;
 
     // GPIO
@@ -471,7 +467,14 @@ struct CfgData {
 
     // System
     struct SectionSystem {
-        int cpuFrequency = 160;
+        struct PowerManagement {
+            struct Cpu {
+                int maxFrequency = 160;
+            } cpu;
+            struct Wifi {
+                int powerMode = WIFI_POWERSAVING_WAKEUP_BY_DTIM;
+            } wifi;
+        } powerManagement;
     } sectionSystem;
 
     // WebUI
@@ -482,15 +485,11 @@ struct CfgData {
             std::string password = "";
         } httpAuth;
         struct AutoRefresh {
-            struct OverviewPage {
+            struct Dashboard {
                 bool enabled = true;
                 int refreshTime = 5;
-            } overviewPage;
-            struct DataGraphPage {
-                bool enabled = false;
-                int refreshTime = 60;
-            } dataGraphPage;
-        } AutoRefresh;
+            } dashboard;
+        } autoRefresh;
     } sectionWebUi;
 };
 

@@ -1,17 +1,13 @@
 #include "ClassFlowInfluxDBv1.h"
 
 #ifdef ENABLE_INFLUXDB
-#include <sstream>
 #include <time.h>
 
 #include <esp_log.h>
 
-#include "time_sntp.h"
+#include "configClass.h"
 #include "interface_influxdbv1.h"
-#include "ClassFlowPostProcessing.h"
 #include "ClassLogFile.h"
-#include "helper.h"
-#include "connect_wlan.h"
 
 
 static const char *TAG = "INFLUXDBV1";

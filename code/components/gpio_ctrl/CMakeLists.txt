@@ -1,7 +1,7 @@
-FILE(GLOB_RECURSE app_sources ${CMAKE_CURRENT_SOURCE_DIR}/*.*)
+FILE(GLOB_RECURSE app_sources ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp ${CMAKE_CURRENT_SOURCE_DIR}/*.c)
 
 idf_component_register(SRCS ${app_sources}
                     INCLUDE_DIRS "." "../../include"
-                    REQUIRES esp_driver_gpio esp_driver_ledc smartleds esp_http_server json logfile_handling config_handling mqtt_ctrl mainprocess_ctrl)
+                    REQUIRES esp_driver_gpio esp_driver_ledc esp_driver_rmt smartleds esp_http_server cjson logfile_handling config_handling mqtt_ctrl mainprocess_ctrl)
 
 

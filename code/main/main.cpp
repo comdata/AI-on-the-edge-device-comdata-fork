@@ -1,7 +1,6 @@
-#include "../../include/defines.h"
+#include "../include/defines.h"
 
 #include <string>
-#include <regex>
 
 #include <nvs_flash.h>
 #include <esp_psram.h>
@@ -14,8 +13,9 @@
 #include <soc/rtc_cntl_reg.h>
 #endif // DISABLE_BROWNOUT_DETECTOR
 
+#include "version.h"
 #include "configClass.h"
-#include "configMigration.h"
+#include "ClassControlCamera.h"
 #include "ClassLogFile.h"
 #include "helper.h"
 #include "system.h"
@@ -45,21 +45,17 @@ static const char *TAG = "MAIN";
 
 std::string deviceStartTimestamp = "";
 
-extern const char *GIT_TAG;
-extern const char *GIT_REV;
-extern const char *GIT_BRANCH;
-extern const char *BUILD_TIME;
-
-extern std::string getFwVersion(void);
-extern std::string getHTMLversion(void);
-extern std::string getHTMLcommit(void);
-
 esp_err_t initNVSFlash();
 esp_err_t initSDCard();
 
 
 extern "C" void app_main(void)
 {
+#ifdef DEBUG_DETAIL_ON
+    logHeap("Startup"); // Log heap overview before user application starts
+
+#endif // DEBUG_DETAIL_ON
+
     deviceStartTimestamp = getCurrentTimeString(TIME_FORMAT_OUTPUT);
 
 #ifdef DISABLE_BROWNOUT_DETECTOR
@@ -115,25 +111,16 @@ extern "C" void app_main(void)
     makeDir("/sdcard/config/backup"); // mandatory for config migration
     makeDir("/sdcard/config/certs");  // mandatory for TLS encryption
     makeDir("/sdcard/config/models"); // mandatory for TFLite models
-    makeDir("/sdcard/firmware");      // mandatory for OTA firmware update
+    makeDir(DIR_OTA_STAGED);          // mandatory for OTA firmware update
     makeDir("/sdcard/img_tmp");       // mandatory for setting up alignment marker
     makeDir("/sdcard/demo");          // mandatory for demo mode
 
-    // Check for updates
-    // Note: OTA status check only necessary if OTA rollback feature is enabled
+    // Check for OTA updates
     // ********************************************
-#ifdef CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
-    checkOTAPartitionState();
-#endif // CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
-    checkOTAUpdate();
+    checkOtaUpdate();
 
-    // Configuration migration for legacy config.ini / wlan.ini
-    // Firmware version: v15.0 - v16.x, Config version: 0 - 2
-    // Note: Migration of v17.x and newer is handled while parsing JSON config (migrateConfiguration)
-    // ********************************************************************************
-    migrateConfigIni();
-
-    // Load persistent config from file (json notation)
+    // Load configuration
+    // ********************************************
     ConfigClass::getInstance()->readConfigFile();
 
     // Init time
@@ -149,6 +136,10 @@ extern "C" void app_main(void)
     // Init improv service for device provisioning via serial / USB interface
     // ********************************************
     improvInit();
+
+    // Allocate webserver memory (in an early stage to avoid memory fragmentation)
+    // Note: Needs to be before AP is started (required for OTA file upload)
+    allocateWebserverHelperMemory();
 
     // Start access point for device provisioning if mandatory content / config is missing
     // Missing HTML content: html/index.html
@@ -181,16 +172,18 @@ extern "C" void app_main(void)
 
     // Check version information
     // ********************************************
-    LogFile.writeToFile(ESP_LOG_INFO, TAG, getFwVersion() + " | Build time: " + std::string(BUILD_TIME) + " | WebUI: " + getHTMLversion());
+    const std::string fwVersion = getFwVersion();
+    const std::string webUiVersion = getWebUiVersion();
+    LogFile.writeToFile(ESP_LOG_INFO, TAG, "Firmware: " + fwVersion + " | WebUI: " + webUiVersion + " | Build time: " + getBuildTime());
 
-    if (getHTMLcommit().starts_with("?")) {
-        LogFile.writeToFile(ESP_LOG_WARN, TAG, std::string("Failed to read file html/version.txt to parse WebUI version"));
+    if (webUiVersion.empty() || webUiVersion.starts_with("?")) {
+        LogFile.writeToFile(ESP_LOG_WARN, TAG, std::string("Failed to parse WebUI version (sdcard/html/version.txt)"));
     }
 
-    if (getHTMLcommit().substr(0, 7) != std::string(GIT_REV).substr(0, 7)) { // Compare the first 7 characters of both hashes
+    if (webUiVersion != fwVersion) {
         LogFile.writeToFile(ESP_LOG_WARN, TAG,
-                            "WebUI version (" + getHTMLcommit() + ") does not match firmware version (" + std::string(GIT_REV) + ")");
-        LogFile.writeToFile(ESP_LOG_WARN, TAG, "Recommendation: Repeat OTA update using AI-on-the-edge-device__board_type__*.zip");
+                            "Version mismatch (Firmware: " + fwVersion + " | WebUI: " + webUiVersion +
+                                "). Repeat OTA update using firmware zip package");
     }
 
     // Check reboot reason
@@ -214,9 +207,6 @@ extern "C" void app_main(void)
         LogFile.writeToFile(ESP_LOG_INFO, TAG, "Reset reason: " + getResetReason());
     }
 
-    // Allocate webserver memory (in an early stage to avoid memory fragmentation)
-    allocateWebserverHelperMemory();
-
     // Set CPU Frequency (default: 160Mhz)
     // Start before WLAN init to avoid frequency changes after WLAN init
     // ********************************************
@@ -235,7 +225,7 @@ extern "C" void app_main(void)
 
     // Init external PSRAM
     // ********************************************
-    esp_err_t PSRAMStatus = esp_psram_init();
+    esp_err_t PSRAMStatus = esp_psram_is_initialized() ? ESP_OK : esp_psram_init();
     if (PSRAMStatus == ESP_FAIL) { // Failed to init PSRAM
         LogFile.writeToFile(ESP_LOG_ERROR, TAG, "PSRAM init failed (" + std::to_string(PSRAMStatus) + ")! PSRAM not found or defective");
         setSystemStatusFlag(SYSTEM_STATUS_PSRAM_BAD);

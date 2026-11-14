@@ -5,6 +5,7 @@
 #include "esp_chip_info.h"
 #include "hal/efuse_hal.h"
 #include "esp_vfs_fat.h"
+#include "esp_heap_caps.h"
 
 #ifdef SOC_TEMP_SENSOR_SUPPORTED
 #include "driver/temperature_sensor.h"
@@ -160,7 +161,7 @@ bool setCPUFrequency(void)
         return false;
     }
 
-    int cpuFrequency = ConfigClass::getInstance()->get()->sectionSystem.cpuFrequency;
+    const int cpuFrequency = ConfigClass::getInstance()->get()->sectionSystem.powerManagement.cpu.maxFrequency;
     if (cpuFrequency == 160) { // 160 is the default
         // No change needed
     }
@@ -173,7 +174,7 @@ bool setCPUFrequency(void)
         }
     }
     else {
-        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "setCpuFrequency: CPU frequency not supported: " + cpuFrequency);
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "setCpuFrequency: CPU frequency not supported: " + std::to_string(cpuFrequency));
         return false;
     }
 
@@ -186,6 +187,22 @@ bool setCPUFrequency(void)
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////
+#ifdef DEBUG_DETAIL_ON
+void logHeap(const char *label)
+{
+    multi_heap_info_t info;
+    heap_caps_get_info(&info, MALLOC_CAP_INTERNAL);
+
+    ESP_LOGI(TAG, "Heap log - %s: Internal(free/largest/min)=%u/%u/%u | DMA(free/largest/min)=%u/%u/%u | PSRAM(free/largest)=%u/%u", label,
+             info.total_free_bytes, info.largest_free_block, info.minimum_free_bytes,
+             heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA),
+             heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA),
+             heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA), heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+             heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+}
+#endif // DEBUG_DETAIL_ON
+
+
 std::string getESPHeapInfo()
 {
     std::string espInfoResultStr = "";
@@ -284,22 +301,22 @@ void setSystemStatusFlag(SystemStatusFlag_t flag)
     systemStatus = systemStatus | flag; // set bit
 
     char buf[20];
-    snprintf(buf, sizeof(buf), "0x%08X", getSystemStatus());
+    snprintf(buf, sizeof(buf), "0x%08X", systemStatus);
     LogFile.writeToFile(ESP_LOG_ERROR, TAG, "System status code: " + std::string(buf));
 }
 
 
 void clearSystemStatusFlag(SystemStatusFlag_t flag)
 {
-    systemStatus = systemStatus | ~flag; // clear bit
+    systemStatus = systemStatus & ~static_cast<unsigned int>(flag); // clear bit
 
     char buf[20];
-    snprintf(buf, sizeof(buf), "0x%08X", getSystemStatus());
+    snprintf(buf, sizeof(buf), "0x%08X", systemStatus);
     LogFile.writeToFile(ESP_LOG_ERROR, TAG, "System status code: " + std::string(buf));
 }
 
 
-int getSystemStatus(void)
+unsigned int getSystemStatus(void)
 {
     return systemStatus;
 }
@@ -307,14 +324,11 @@ int getSystemStatus(void)
 
 bool isSetSystemStatusFlag(SystemStatusFlag_t flag)
 {
-    // ESP_LOGE(TAG, "Flag (0x%08X) is set (0x%08X): %d", flag, systemStatus , ((systemStatus & flag) == flag));
-
     if ((systemStatus & flag) == flag) {
         return true;
     }
-    else {
-        return false;
-    }
+
+    return false;
 }
 
 
@@ -348,9 +362,20 @@ std::string getResetReason(void)
 }
 
 
+void markPlannedReboot(void)
+{
+    FILE *pfile = fopen(FILE_REBOOT_TRACKER, "w");
+    if (pfile) {
+        std::string zw = "reboot";
+        fwrite(zw.c_str(), strlen(zw.c_str()), 1, pfile);
+        fclose(pfile);
+    }
+}
+
+
 void checkIsPlannedReboot()
 {
-    FILE *file = fopen("/sdcard/reboot.txt", "r");
+    FILE *file = fopen(FILE_REBOOT_TRACKER, "r");
     if (!file) {
         isPlannedReboot = false;
         return;
@@ -358,7 +383,7 @@ void checkIsPlannedReboot()
 
     fclose(file);
 
-    if (!deleteFile("/sdcard/reboot.txt")) {
+    if (!deleteFile(FILE_REBOOT_TRACKER)) {
         LogFile.writeToFile(ESP_LOG_WARN, TAG, "Failed to delete reboot file");
     }
 

@@ -4,9 +4,8 @@
 #include <string>
 
 #include "ClassFlowDefineTypes.h"
-#include "configClass.h"
+#include "cfgDataStruct.h"
 #include "ClassFlow.h"
-#include "helper.h"
 
 
 class ClassFlowAlignment : public ClassFlow
@@ -14,11 +13,8 @@ class ClassFlowAlignment : public ClassFlow
   protected:
     const CfgData::SectionImageAlignment *cfgDataPtr = NULL;
     AlignmentMarker alignmentMarker[2];
-    int alignSimilarityCheckSADThreshold;
 
     void drawAlignmentMarker(CImage &image);
-    bool loadAlignmentMarkerData(void);
-    bool saveAlignmentMarkerData(void);
 
     void doPostProcessEventHandling();
 

@@ -4,7 +4,6 @@
 #include "freertos/queue.h"
 #include <cJSON.h>
 
-#include "gpioControl.h"
 #include "ClassLogFile.h"
 #include "helper.h"
 #include "MainFlowControl.h"
@@ -53,6 +52,7 @@ GpioPin::~GpioPin()
     LogFile.writeToFile(ESP_LOG_DEBUG, TAG, "Reset GPIO" + std::to_string((int)gpio));
 
     if (interruptType != GPIO_INTR_DISABLE) {
+        gpio_intr_disable(gpio);
         gpio_isr_handler_remove(gpio);
     }
 

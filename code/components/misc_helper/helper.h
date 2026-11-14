@@ -9,30 +9,31 @@
 
 bool fileExists(std::string filename);
 bool copyFile(std::string input, std::string output);
-bool renameFile(std::string from, std::string to);
-bool deleteFile(std::string fn);
-
-std::string getFileFullFileName(std::string filename);
-std::string getFileType(std::string filename);
+bool renameFile(const std::string &srcFile, const std::string &destFile);
+bool deleteFile(std::string file);
+bool isValidFilename(const std::string &filename);
+std::string getFileName(const std::string &path);
+std::string getFileType(const std::string &filename);
 bool getFileIsFiletype(const std::string &filename, const std::string &filetype);
 size_t getFileSize(const std::string &filename);
+bool readFileToString(const std::string &path, std::string &out);
 
-std::string getDirectory(std::string filename);
+bool isSafePath(const std::string &path);
+bool dirExists(const std::string &directory);
+std::string getDirectory(const std::string &filename);
 bool makeDir(std::string _what);
 int makeDirRecursive(const char *dir, const mode_t mode);
 int removeFolder(const char *folderPath, const char *logTag);
-esp_err_t deleteAllFilesInDirectory(std::string directory, bool recursive = false, bool deleteRootFolder = false);
-void moveAllFilesWithFiletype(std::string sourceDir, std::string destinationDir, std::string filetype);
+bool replaceFolder(const std::string &sourceDir, const std::string &targetDir);
+bool mergeFolder(const std::string &sourceDir, const std::string &targetDir);
+esp_err_t deleteAllFilesInDirectory(const std::string &directory, bool recursive = false, bool deleteRootFolder = false);
 
 std::string formatFileName(std::string input);
 std::string trim(std::string istring, std::string adddelimiter = "");
 std::string toLower(std::string in);
 std::string toUpper(std::string in);
 
-void findReplace(std::string &line, std::string &oldString, std::string &newString);
 void replaceAll(std::string &s, const std::string &toReplace, const std::string &replaceWith);
-bool isInString(std::string &s, std::string const &toFind);
-std::vector<std::string> splitStringAtNewline(const std::string &str);
 size_t findDelimiterPos(std::string input, std::string delimiter);
 
 std::string to_stringWithPrecision(const double _value, int _decPlace);

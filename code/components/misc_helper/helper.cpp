@@ -2,22 +2,15 @@
 #include "helper.h"
 #include "../../include/defines.h"
 
-#include <sstream>
-#include <fstream>
+#include <vector>
+#include <algorithm>
 #include <cstring>
 #include <cmath>
 #include <unistd.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 #include <dirent.h>
-#ifdef __cplusplus
-}
-#endif
 
 #include <esp_log.h>
 #include <esp_timer.h>
@@ -78,96 +71,203 @@ bool copyFile(std::string input, std::string output)
 }
 
 
-bool renameFile(std::string from, std::string to)
+bool renameFile(const std::string &srcFile, const std::string &destFile)
 {
-    FILE *fpFile = fopen(from.c_str(), "rb");
-    if (!fpFile) { // File not existing
-        ESP_LOGE(TAG, "renameFile: File %s not existing", from.c_str());
+    std::string backupFile = destFile + "_backup";
+    bool hadExistingDest = false;
+
+    // Backup destination (if existing)
+    if (access(destFile.c_str(), F_OK) == 0) {
+        unlink(backupFile.c_str());
+        if (rename(destFile.c_str(), backupFile.c_str()) == 0) {
+            hadExistingDest = true;
+        }
+        else {
+            ESP_LOGE(TAG, "Failed to backup existing destination: %s", destFile.c_str());
+            return false;
+        }
+    }
+
+    // Rename souce to destination
+    if (rename(srcFile.c_str(), destFile.c_str()) != 0) {
+        ESP_LOGE(TAG, "Failed to rename %s to %s", srcFile.c_str(), destFile.c_str());
+
+        if (hadExistingDest) { // Restore on failure
+            rename(backupFile.c_str(), destFile.c_str());
+        }
+
         return false;
     }
-    fclose(fpFile);
 
-    return (rename(from.c_str(), to.c_str()) == 0);
-}
-
-
-bool deleteFile(std::string fn)
-{
-    FILE *fpFile = fopen(fn.c_str(), "rb");
-    if (!fpFile) { // File not existing
-        return false;
+    // Clean up backup
+    if (hadExistingDest) {
+        unlink(backupFile.c_str());
     }
-    fclose(fpFile);
 
-    unlink(fn.c_str());
     return true;
 }
 
 
-std::string getFileFullFileName(std::string filename)
+bool deleteFile(std::string file)
 {
-    size_t lastpos = filename.find_last_of('/');
-
-    if (lastpos == std::string::npos) {
-        return "";
-    }
-
-    //	ESP_LOGD(TAG, "Last position: %d", lastpos);
-
-    std::string zw = filename.substr(lastpos + 1, filename.size() - lastpos);
-
-    return zw;
+    return (unlink(file.c_str()) == 0);
 }
 
 
-std::string getFileType(std::string filename)
+bool isValidFilename(const std::string &filename)
 {
-    size_t lastpos = filename.rfind(".", filename.length());
-    size_t neu_pos;
-    while ((neu_pos = filename.find(".", lastpos + 1)) > -1) {
-        lastpos = neu_pos;
+    if (filename.empty() || filename.length() > 128) {
+        return false;
     }
 
+    if (filename == "." || filename == "..") {
+        return false;
+    }
+
+    if (filename.find('/') != std::string::npos || filename.find('\\') != std::string::npos || filename.find("..") != std::string::npos) {
+        return false;
+    }
+
+    for (const unsigned char c : filename) {
+        if (c < 0x20 || c == 0x7F) {
+            return false;
+        }
+    }
+
+    return filename.length() >= 4 && toLower(filename.substr(filename.length() - 4)) == ".zip";
+}
+
+
+std::string getFileName(const std::string &path)
+{
+    if (path.empty()) {
+        return "";
+    }
+
+    const size_t lastpos = path.find_last_of("/\\");
+    if (lastpos == std::string::npos) {
+        return path;
+    }
+
+    return path.substr(lastpos + 1);
+}
+
+
+std::string getFileType(const std::string &filename)
+{
+    const size_t lastpos = filename.find_last_of('.');
     if (lastpos == std::string::npos) {
         return "";
     }
 
-    std::string zw = filename.substr(lastpos + 1, filename.size() - lastpos);
-    zw = toUpper(zw);
-
-    return zw;
+    return toUpper(filename.substr(lastpos + 1));
 }
 
 
 bool getFileIsFiletype(const std::string &filename, const std::string &filetype)
 {
-    return (filename.substr(filename.find_last_of(".") + 1) == filetype);
-
-    /*std::size_t extPos = filename.rfind(".", filename.length());
-    if (extPos == std::string::npos)
+    const size_t pos = filename.find_last_of('.');
+    if (pos == std::string::npos) {
         return false;
+    }
 
-    ESP_LOGI(TAG, "check: %s, %s", filename.substr(filename.rfind(".", filename.length()) + 1).c_str(), filetype.c_str());
-
-    return (filename.substr(filename.rfind(".", filename.length()) + 1) == filetype);*/
+    return toUpper(filename.substr(pos + 1)) == toUpper(filetype);
 }
 
 
 std::size_t getFileSize(const std::string &filename)
 {
-    std::ifstream file(filename.c_str(), std::ios::in | std::ios::binary);
-    if (!file) {
+    struct stat st;
+
+    if (stat(filename.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) {
         return 0;
     }
 
-    file.seekg(0, std::ios::end);
-    return static_cast<std::size_t>(file.tellg());
+    return static_cast<std::size_t>(st.st_size);
+}
+
+
+bool readFileToString(const std::string &path, std::string &out)
+{
+    out.clear();
+
+    if (path.empty()) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "readFileToString: No valid path");
+        return false;
+    }
+
+    const std::size_t fileSize = getFileSize(path);
+    if (fileSize == 0) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "readFileToString: File missing or empty");
+        return false;
+    }
+
+    FILE *fp = fopen(path.c_str(), "rb");
+    if (!fp) {
+        const int error = errno;
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "readFileToString: Failed to open file: " + path + " | Errno: " + std::to_string(error));
+        return false;
+    }
+
+    // Use a 512-byte buffer for SD card access (newlib default: 128 bytes)
+    setvbuf(fp, NULL, _IOFBF, 512);
+
+    out.reserve(fileSize);
+
+    char buf[512];
+    while (const size_t bytesRead = fread(buf, 1, sizeof(buf), fp)) {
+        out.append(buf, bytesRead);
+    }
+
+    const bool success = !ferror(fp);
+    fclose(fp);
+
+    if (!success) {
+        out.clear();
+    }
+
+    return success;
 }
 
 
 // Directory related helper
 // **********************************************************
-std::string getDirectory(std::string filename)
+bool isSafePath(const std::string &path)
+{
+    if (path.empty() || path[0] == '/' || path[0] == '\\' || path.find('\\') != std::string::npos) {
+        return false;
+    }
+
+    for (size_t start = 0; start < path.length();) {
+        const size_t end = path.find('/', start);
+        const size_t length = (end == std::string::npos ? path.length() : end) - start;
+
+        if (length == 0 || (length == 1 && path[start] == '.') || (length == 2 && path[start] == '.' && path[start + 1] == '.')) {
+            return false;
+        }
+
+        if (end == std::string::npos) {
+            break;
+        }
+
+        start = end + 1;
+    }
+
+    return true;
+}
+
+
+bool dirExists(const std::string &directory)
+{
+    struct stat info;
+    if (stat(directory.c_str(), &info) != 0) {
+        return false; // Cannot access path or does not exist
+    }
+    return S_ISDIR(info.st_mode); // Check if it's a directory
+}
+
+
+std::string getDirectory(const std::string &filename)
 {
     size_t lastpos = filename.rfind('/');
 
@@ -330,11 +430,101 @@ int removeFolder(const char *folderPath, const char *logTag)
 }
 
 
-esp_err_t deleteAllFilesInDirectory(std::string directory, bool recursive, bool deleteRootFolder)
+/**
+ * @brief Transactional directory replacement with fallback backup strategy
+ */
+bool replaceFolder(const std::string &sourceDir, const std::string &targetDir)
+{
+    const std::string backupDir = targetDir + "_backup";
+
+    // Purge previous backup if lingering
+    deleteAllFilesInDirectory(backupDir, true, true);
+
+    // Move existing target to backup
+    struct stat st;
+    bool hadTarget = (stat(targetDir.c_str(), &st) == 0);
+    if (hadTarget) {
+        if (rename(targetDir.c_str(), backupDir.c_str()) != 0) {
+            LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Failed to move target " + targetDir + " to backup " + backupDir);
+            return false;
+        }
+    }
+
+    // Promote staged source to target
+    if (rename(sourceDir.c_str(), targetDir.c_str()) == 0) {
+        // Success: Delete backup
+        deleteAllFilesInDirectory(backupDir, true, true);
+        return true;
+    }
+
+    LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Failed to promote " + sourceDir + " to " + targetDir + ". Restoring backup...");
+
+    // Recovery: Revert from backup if promotion failed
+    if (hadTarget) {
+        if (rename(backupDir.c_str(), targetDir.c_str()) != 0) {
+            LogFile.writeToFile(ESP_LOG_ERROR, TAG,
+                                "Failed to restore backup " + backupDir + " to " + targetDir + ". Content remains in backup folder");
+        }
+    }
+    return false;
+}
+
+
+bool mergeFolder(const std::string &sourceDir, const std::string &targetDir)
+{
+    if (!makeDir(targetDir)) {
+        return false;
+    }
+
+    DIR *dir = opendir(sourceDir.c_str());
+    if (!dir) {
+        return false;
+    }
+
+    std::vector<std::string> entries;
+    struct dirent *entry;
+
+    while ((entry = readdir(dir)) != nullptr) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        entries.emplace_back(entry->d_name);
+    }
+
+    closedir(dir);
+
+    for (const auto &name : entries) {
+        const std::string srcPath = sourceDir + "/" + name;
+        const std::string dstPath = targetDir + "/" + name;
+
+        struct stat st;
+        if (stat(srcPath.c_str(), &st) != 0) {
+            continue;
+        }
+
+        if (S_ISDIR(st.st_mode)) {
+            if (!mergeFolder(srcPath, dstPath)) {
+                LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Failed to merge folder " + srcPath + " to " + dstPath);
+                return false;
+            }
+        }
+        else {
+            if (!renameFile(srcPath, dstPath)) {
+                LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Failed to move file " + srcPath + " to " + dstPath);
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+
+esp_err_t deleteAllFilesInDirectory(const std::string &directory, bool recursive, bool deleteRootFolder)
 {
     DIR *dir = opendir(directory.c_str());
     if (!dir) {
-        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "deleteAllFilesInDirectory: Failed to open directory: " + directory);
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -378,47 +568,10 @@ esp_err_t deleteAllFilesInDirectory(std::string directory, bool recursive, bool 
 }
 
 
-void moveAllFilesWithFiletype(std::string sourceDir, std::string destinationDir, std::string filetype)
-{
-    DIR *dir = opendir(sourceDir.c_str());
-
-    if (!dir) {
-        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "moveAllFilesWithFiletype: Failed to open directory: " + sourceDir);
-        return;
-    }
-
-    // Iterate over all files in folder and move if extention is matching
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (!(entry->d_type == DT_DIR)) {
-            if (getFileIsFiletype(std::string(entry->d_name), filetype)) {
-                std::string sourceFilename = sourceDir + "/" + std::string(entry->d_name);
-                std::string destFilename = destinationDir + "/" + std::string(entry->d_name);
-                if (!fileExists(destFilename)) { // Move source file if file not existing at destination
-                    LogFile.writeToFile(ESP_LOG_INFO, TAG, "Move file: " + sourceFilename);
-                    renameFile(sourceFilename, destinationDir + "/" + std::string(entry->d_name));
-                }
-                else { // Delete source file if file is already existing at destination
-                    deleteFile(sourceFilename);
-                }
-            }
-        }
-    }
-
-    closedir(dir);
-}
-
-
 // String manipulation helper
 // **********************************************************
 std::string formatFileName(std::string input)
 {
-#ifdef ISWINDOWS_TRUE
-    input.erase(0, 1);
-    std::string os = "/";
-    std::string ns = "\\";
-    findReplace(input, os, ns);
-#endif // ISWINDOWS_TRUE
     return input;
 }
 
@@ -503,35 +656,6 @@ std::string toLower(std::string in)
 }
 
 
-void findReplace(std::string &line, std::string &oldString, std::string &newString)
-{
-    const size_t oldSize = oldString.length();
-
-    // do nothing if line is shorter than the string to find
-    if (oldSize > line.length()) {
-        return;
-    }
-
-    const size_t newSize = newString.length();
-    for (size_t pos = 0;; pos += newSize) {
-        // Locate the substring to replace
-        pos = line.find(oldString, pos);
-        if (pos == std::string::npos) {
-            return;
-        }
-        if (oldSize == newSize) {
-            // if they're same size, use std::string::replace
-            line.replace(pos, oldSize, newString);
-        }
-        else {
-            // if not same size, replace by erasing and inserting
-            line.erase(pos, oldSize);
-            line.insert(pos, newString);
-        }
-    }
-}
-
-
 // from https://stackoverflow.com/a/14678800
 void replaceAll(std::string &s, const std::string &toReplace, const std::string &replaceWith)
 {
@@ -543,43 +667,15 @@ void replaceAll(std::string &s, const std::string &toReplace, const std::string 
 }
 
 
-bool isInString(std::string &s, std::string const &toFind)
+std::string to_stringWithPrecision(const double _value, int _decPlace)
 {
-    std::size_t pos = s.find(toFind);
+    char buffer[64];
+    _decPlace = std::clamp(_decPlace, 0, 15);
 
-    if (pos == std::string::npos) { // Not found
-        return false;
-    }
-    return true;
-}
+    // The '*' takes the next argument (_decPlace) as the precision
+    snprintf(buffer, sizeof(buffer), "%.*f", _decPlace, _value);
 
-
-std::vector<std::string> splitStringAtNewline(const std::string &str)
-{
-    std::vector<std::string> tokens;
-
-    std::stringstream ss(str);
-    std::string token;
-
-    while (std::getline(ss, token, '\n')) {
-        tokens.push_back(token);
-    }
-
-    return tokens;
-}
-
-
-std::string to_stringWithPrecision(const double _value, int _decPlace = 6)
-{
-    std::ostringstream out;
-
-    if (_decPlace < 0) {
-        _decPlace = 0;
-    }
-
-    out.precision(_decPlace);
-    out << std::fixed << _value;
-    return out.str();
+    return std::string(buffer);
 }
 
 

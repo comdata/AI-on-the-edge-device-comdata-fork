@@ -1,7 +1,8 @@
-FILE(GLOB_RECURSE app_sources ${CMAKE_CURRENT_SOURCE_DIR}/*.*)
+FILE(GLOB_RECURSE app_sources ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp ${CMAKE_CURRENT_SOURCE_DIR}/*.c)
 
 idf_component_register(SRCS ${app_sources}
                     INCLUDE_DIRS "."
-                    REQUIRES esp_timer esp_wifi json tflite_ctrl misc_helper camera_ctrl mqtt_ctrl influxdb_ctrl webhook_ctrl homeassistant_ctrl fileserver_ota image_handling network_ctrl config_handling)
+                    REQUIRES esp_timer esp_wifi cjson tflite_ctrl misc_helper camera_ctrl mqtt_ctrl influxdb_ctrl
+                        webhook_ctrl homeassistant_ctrl fileserver_ota image_handling network_ctrl config_handling)
 
 

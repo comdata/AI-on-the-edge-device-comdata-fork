@@ -8,8 +8,7 @@
 
 # OS metadata
 .DS_Store
-images/Thumbs.db
-sd-card/html/Thumbs.db
+Thumbs.db
 venv/
 
 # Build artifacts
@@ -21,8 +20,7 @@ cmake_install.cmake
 install_manifest.txt
 compile_commands.json
 **/.pio/
-sd-card/html_compiled
-AI-on-the-edge-device*
+**.builds/
 dependencies.lock
 managed_components
 **/managed_components/**
@@ -33,7 +31,8 @@ version.txt
 
 # SDK / platform-specific configs
 sdkconfig.esp32cam
-sdkconfig.xiao-esp32s3-sense
 sdkconfig.freenove-esp32s3-n8r8
 sdkconfig.freenove-esp32s3-n16r8
+sdkconfig.nulllab-esp32s3-cam
 sdkconfig.waveshare-esp32s3-eth
+sdkconfig.xiao-esp32s3-sense

@@ -11,7 +11,7 @@
 #include <driver/gpio.h>
 #include <driver/ledc.h>
 
-#include "configClass.h"
+#include "cfgDataStruct.h"
 #include "gpioPin.h"
 
 
@@ -31,7 +31,7 @@ class GpioHandler
     esp_err_t loadParameter();
     void clearData();
 
-    void ledcInitGpio(ledc_timer_t _timer, ledc_channel_t _channel, int _gpioNum, int _frequency);
+    bool ledcInitGpio(ledc_timer_t _timer, ledc_channel_t _channel, int _gpioNum, int _frequency);
 
     std::map<int, ledc_timer_t> frequencyTable;
     int calcDutyResolutionMaxValue(int frequency);

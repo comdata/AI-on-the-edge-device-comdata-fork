@@ -1,8 +1,8 @@
-FILE(GLOB_RECURSE app_sources ${CMAKE_CURRENT_SOURCE_DIR}/*.*)
+FILE(GLOB_RECURSE app_sources ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp ${CMAKE_CURRENT_SOURCE_DIR}/*.c)
 
 idf_component_register(SRCS ${app_sources}
                     INCLUDE_DIRS "."
-                    REQUIRES unity json jomjol_helper
+                    REQUIRES unity cjson jomjol_helper
                     EMBED_TXTFILES config_json_default_expected.txt
                                     config_json_high_limit_expected.txt
                                     config_json_high_limit.txt

@@ -1,6 +1,6 @@
 [Overview](_OVERVIEW.md) 
 
-## REST API endpoint: coredump
+## REST API Endpoint: `coredump`
 
 `http://IP-ADDRESS/coredump`
 
@@ -26,7 +26,7 @@ Handle core dumps for debugging purpose (software exception)<br>
         Depth: 11
         Corrupted: 0
         PC: 1074280733
-        Firmware version: Develop: coredump (Commit: b23f061)
+        Firmware version: coredump-b23f061
         ```
 
 3. Save core dump file:

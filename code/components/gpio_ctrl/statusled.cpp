@@ -7,9 +7,11 @@
 #include <esp_rom_gpio.h>
 #include <driver/ledc.h>
 
-#include "gpioControl.h"
 #include "ClassLogFile.h"
-#include "helper.h"
+
+#ifdef GPIO_STATUS_LED_ONBOARD_USE_SMARTLED
+#include "gpioControl.h"
+#endif // GPIO_STATUS_LED_ONBOARD_USE_SMARTLED
 
 
 static const char *TAG = "STATUSLED";
@@ -61,6 +63,16 @@ static void task_StatusLED(void *pvParameter)
         for (int i = 0; i < 2;) {
             if (!StatusLEDDataInt.bInfinite) {
                 ++i;
+            }
+            else {
+                // Periodically check if cancellation was requested during infinite looping
+                if (xSemaphoreTake(xStatusLedMutex, 0) == pdTRUE) {
+                    bool cancel = !StatusLEDData.bProcessingRequest;
+                    xSemaphoreGive(xStatusLedMutex);
+                    if (cancel) {
+                        break;
+                    }
+                }
             }
 
             // Source Blinks

@@ -2,7 +2,7 @@ Modify JSON elements accordingly to test default values and stringfy as compact 
 
 {
   "config": {
-    "version": 6,
+    "version": 9,
     "lastmodified": ""
   },
   "operationmode": {
@@ -12,7 +12,7 @@ Modify JSON elements accordingly to test default values and stringfy as compact 
   },
   "takeimage": {
     "flashlight": {
-      "flashtime": 2000,
+      "flashtime": 1000,
       "flashintensity": 50
     },
     "camera": {
@@ -387,9 +387,16 @@ Modify JSON elements accordingly to test default values and stringfy as compact 
       "processstartinterlock": true
     }
   },
-  "system": {
-    "cpufrequency": 160
-  },
+	"system":	{
+		"powermanagement":	{
+			"cpu":	{
+				"maxfrequency":	160
+			},
+			"wifi":	{
+				"powermode":	1
+			}
+		}
+	},
   "webui": {
     "httpauth": {
       "authmode": 0,
@@ -397,13 +404,9 @@ Modify JSON elements accordingly to test default values and stringfy as compact 
       "password": ""
     },
     "autorefresh": {
-      "overviewpage": {
+      "dashboard": {
         "enabled": true,
         "refreshtime": 5
-      },
-      "datagraphpage": {
-        "enabled": false,
-        "refreshtime": 60
       }
     }
   }
