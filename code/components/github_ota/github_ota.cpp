@@ -55,7 +55,7 @@ static esp_err_t httpGetToString(const std::string &url, std::string &result, co
     config.timeout_ms = 15000;
     config.buffer_size = 2048;
     config.crt_bundle_attach = esp_crt_bundle_attach;
-    config.max_redirections = 3;
+    config.max_redirection_count = 3;
     config.event_handler = apiEventHandler;
     config.user_data = &response;
 
@@ -277,7 +277,7 @@ esp_err_t githubOtaDownload(const GitHubOtaInfo &info)
     config.timeout_ms = 30000;
     config.buffer_size = DOWNLOAD_BUFFER;
     config.crt_bundle_attach = esp_crt_bundle_attach;
-    config.max_redirections = 5;
+    config.max_redirection_count = 5;
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (client == NULL) {
