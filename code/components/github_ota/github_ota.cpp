@@ -56,6 +56,15 @@ struct DownloadContext {
     FILE *file = NULL;
     size_t written = 0;
     bool writeFailed = false;
+    size_t expected = 0;  // Content-Length of the final answer
+    std::string location; // Location header of a redirect
+};
+
+
+struct DownloadContext {
+    FILE *file = NULL;
+    size_t written = 0;
+    bool writeFailed = false;
     size_t expected = 0; // Content-Length of the answer
 };
 
@@ -188,3 +197,219 @@ esp_err_t githubOtaDownload(const GitHubOtaInfo &info)
                         "Downloaded " + info.assetName + " (" + std::to_string(context.written) + " bytes) to " GITHUB_OTA_ZIP_PATH);
     return ESP_OK;
 }
+
+
+static esp_err_t httpGetToString(const std::string &url, std::string &result, const char *accept)
+{
+    ApiResponse response;
+    esp_http_client_config_t config = {};
+    config.url = url.c_str();
+    config.user_agent = "AI-on-the-Edge Device";
+    config.method = HTTP_METHOD_GET;
+    config.timeout_ms = 15000;
+    config.buffer_size = 2048;
+    config.crt_bundle_attach = esp_crt_bundle_attach;
+    config.max_redirection_count = 3;
+    config.event_handler = apiEventHandler;
+    config.user_data = &response;
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (client == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+    esp_http_client_set_header(client, "Accept", accept);
+
+    esp_err_t err = esp_http_client_perform(client);
+    int status = esp_http_client_get_status_code(client);
+    esp_http_client_cleanup(client);
+
+    if (err != ESP_OK) {
+        return err;
+    }
+    if (response.overflow) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    if (status != 200) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "HTTP " + std::to_string(status) + " for " + url);
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+    result = response.data;
+    return ESP_OK;
+}
+
+
+static std::string installedTagPath()
+{
+    return std::string(GITHUB_OTA_INSTALLED_TAG_FILE);
+}
+
+
+static std::string pendingTagPath()
+{
+    return std::string(GITHUB_OTA_INSTALLED_TAG_FILE ".pending");
+}
+
+
+static std::string readTagFile(const std::string &path)
+{
+    FILE *file = fopen(path.c_str(), "r");
+    if (file == NULL) {
+        return "";
+    }
+    char buffer[128] = {0};
+    size_t read = fread(buffer, 1, sizeof(buffer) - 1, file);
+    fclose(file);
+    std::string value(buffer, read);
+    while (!value.empty() && (value.back() == '\n' || value.back() == '\r')) {
+        value.pop_back();
+    }
+    return value;
+}
+
+
+static void writeTagFile(const std::string &path, const std::string &value)
+{
+    FILE *file = fopen(path.c_str(), "w");
+    if (file == NULL) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Cannot write " + path);
+        return;
+    }
+    fwrite(value.c_str(), 1, value.size(), file);
+    fclose(file);
+}
+
+
+void githubOtaRememberPendingTag(const std::string &tag)
+{
+    writeTagFile(pendingTagPath(), tag);
+}
+
+
+std::string githubOtaConsumePendingTag()
+{
+    std::string pending = readTagFile(pendingTagPath());
+    if (pending.empty()) {
+        return "";
+    }
+    writeTagFile(installedTagPath(), pending);
+    deleteFile(pendingTagPath());
+    return pending;
+}
+
+
+static std::string currentVersionString()
+{
+    std::string version = std::string(GIT_BRANCH) + " / " + std::string(GIT_TAG) + " (" + std::string(GIT_REV) + ")";
+    return version;
+}
+
+
+bool githubOtaCheck(GitHubOtaInfo &info, const std::string &repoOverride)
+{
+    info = GitHubOtaInfo{};
+    info.repo = repoOverride.empty() ? std::string(GITHUB_OTA_DEFAULT_REPO) : repoOverride;
+    info.currentVersion = currentVersionString();
+    info.installedTag = readTagFile(installedTagPath());
+
+    std::string pending = githubOtaConsumePendingTag();
+    if (!pending.empty()) {
+        LogFile.writeToFile(ESP_LOG_INFO, TAG, "Update installed from GitHub release: " + pending);
+        info.installedTag = pending;
+    }
+
+    if (!getTimeIsSet()) {
+        info.error = "System time is not set, TLS verification is not possible yet";
+        return false;
+    }
+
+    std::string response;
+    std::string url = "https://api.github.com/repos/" + info.repo + "/releases/latest";
+    esp_err_t err = httpGetToString(url, response, "application/vnd.github+json");
+    if (err != ESP_OK) {
+        info.error = "GitHub API request failed: " + std::string(esp_err_to_name(err));
+        return false;
+    }
+
+    cJSON *root = cJSON_Parse(response.c_str());
+    if (root == NULL) {
+        info.error = "GitHub API answer is not valid JSON";
+        return false;
+    }
+
+    cJSON *tag = cJSON_GetObjectItemCaseSensitive(root, "tag_name");
+    if (cJSON_IsString(tag)) {
+        info.latestTag = tag->valuestring;
+    }
+    cJSON *name = cJSON_GetObjectItemCaseSensitive(root, "name");
+    if (cJSON_IsString(name)) {
+        info.releaseName = name->valuestring;
+    }
+    cJSON *body = cJSON_GetObjectItemCaseSensitive(root, "body");
+    if (cJSON_IsString(body)) {
+        std::string notes = body->valuestring;
+        if (notes.size() > 400) {
+            notes = notes.substr(0, 400) + "…";
+        }
+        info.notes = notes;
+    }
+
+    cJSON *assets = cJSON_GetObjectItemCaseSensitive(root, "assets");
+    cJSON *asset = NULL;
+    std::string fallbackName;
+    std::string fallbackUrl;
+    cJSON_ArrayForEach(asset, assets)
+    {
+        cJSON *assetName = cJSON_GetObjectItemCaseSensitive(asset, "name");
+        if (!cJSON_IsString(assetName)) {
+            continue;
+        }
+        std::string candidate = assetName->valuestring;
+        if (candidate.size() < 4 || candidate.substr(candidate.size() - 4) != ".zip") {
+            continue;
+        }
+        cJSON *downloadUrl = cJSON_GetObjectItemCaseSensitive(asset, "browser_download_url");
+        if (!cJSON_IsString(downloadUrl)) {
+            continue;
+        }
+        if (candidate.find(GITHUB_OTA_DEFAULT_ASSET_FILTER) == std::string::npos) {
+            // Remember the first ZIP as fallback for releases that do not name the board
+            if (fallbackUrl.empty()) {
+                fallbackName = candidate;
+                fallbackUrl = downloadUrl->valuestring;
+            }
+            continue;
+        }
+        info.assetName = candidate;
+        info.assetUrl = downloadUrl->valuestring;
+        break;
+    }
+
+    if (info.assetUrl.empty() && !fallbackUrl.empty()) {
+        LogFile.writeToFile(ESP_LOG_WARN, TAG,
+                            "No asset for this board found, using " + fallbackName + " instead");
+        info.assetName = fallbackName;
+        info.assetUrl = fallbackUrl;
+    }
+
+    cJSON_Delete(root);
+
+    if (info.latestTag.empty()) {
+        info.error = "Release has no tag name";
+        return false;
+    }
+    if (info.assetUrl.empty()) {
+        info.error = "Release has no firmware asset for this board";
+        return false;
+    }
+
+    info.updateAvailable = (info.installedTag != info.latestTag);
+
+    LogFile.writeToFile(ESP_LOG_INFO, TAG,
+                        "Latest release: " + info.latestTag + " | installed: " +
+                            (info.installedTag.empty() ? "unknown" : info.installedTag) + " | update available: " +
+                            (info.updateAvailable ? "yes" : "no"));
+    return true;
+}
+
+
+// One download attempt; returns the HTTP status and the redirect target.
