@@ -6,8 +6,8 @@
 |---|---|
 | Host | `10.0.1.20` (mDNS `watermeter.local`), hostname `watermeter` |
 | Board | ESP32CAM (AI-on-the-Edge, ESP32, 8 MB PSRAM, SD 4 GB) |
-| Firmware | `ha-api` branch / `v18.0.0-SLFork` base, HA API publishing |
-| WebUI | `http://10.0.1.20/` |
+| Firmware | `ha-api` (seit 2026-11-14 mit `develop` gemergt: responsive comdataFork-WebUI + HA-API). Version meldet `ha-api-ee765ba` (kein Tag auf dem Branch). |
+| WebUI | `http://10.0.1.20/` (Sidebar-Layout, comdataFork) |
 
 ## HTTP access (WebUI and every REST endpoint)
 
@@ -25,6 +25,14 @@ Example:
 curl -u aiote:'rtJMMja9Hwf5HqM95YHKQKrg' http://10.0.1.20/info
 curl -s -o raw.jpg -u aiote:'rtJMMja9Hwf5HqM95YHKQKrg' http://10.0.1.20/img_tmp/raw.jpg
 ```
+
+## Home Assistant publishing
+
+`/config/homeassistant.json` is active (`enabled: true`, `http://192.168.1.156:8123`, prefix
+`ai_on_the_edge`). Each processed cycle POSTs the states directly to the HA REST API, so no
+MQTT is involved: `sensor.ai_on_the_edge_main_value`, `_raw_value`, `_value_status`, `_main_rate`.
+HA uses them through the `utility_meter` helper "Wasser pro Tag". The optional
+`ha/ai_on_the_edge_package.yaml` (rest_commands for cycle start/config/reboot) is not installed.
 
 The same credentials are stored in the Home Assistant helper secrets
 (`aioe_user` / `aioe_password`) and in the earlier HA integration entry.
