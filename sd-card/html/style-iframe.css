@@ -62,7 +62,7 @@ body {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   margin: 0 auto;
-  width: var(--reduced-width);
+  width: 100%;
   max-width: var(--reduced-width);
   background-color: var(--bg);
   color: var(--text-main);
@@ -74,6 +74,12 @@ body {
   html {
     font-size: 16px;
   }
+}
+
+img,
+canvas,
+video {
+  max-width: 100%;
 }
 
 .container {
@@ -111,6 +117,12 @@ body {
   padding: 10px 15px;
   background: var(--bg-light);
   border-bottom: 1px solid var(--border);
+}
+
+/* Page headers use an inline flex row around title and controls */
+.container-header > div {
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 
 .container-content {
@@ -251,6 +263,7 @@ details {
 .refresh-group {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
 }
 
@@ -350,4 +363,37 @@ details {
 
 #rssi_svg.no-signal .bar {
   opacity: 0.1;
+}
+/* ========================================================================== */
+/* Responsive                                                                 */
+/* ========================================================================== */
+
+@media screen and (max-width: 720px) {
+  .container {
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  /* Wide content (tables, images) scrolls inside its card instead of stretching the page */
+  .card-body {
+    overflow-x: auto;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .container-header {
+    padding: 8px 10px;
+  }
+
+  .container-content {
+    padding: 10px 10px 20px;
+  }
+
+  .card-header {
+    padding: 8px 10px;
+  }
+
+  .button {
+    max-width: 100%;
+  }
 }

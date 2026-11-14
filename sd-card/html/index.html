@@ -4,7 +4,7 @@
 <head>
   <title>AI-on-the-Edge Device</title>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=720" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <script>
     // Theme Control
@@ -77,39 +77,47 @@
     }
 
     function closeMenu() {
-      document.querySelectorAll('.menu ul ul').forEach((el) => {
-        el.style.visibility = 'hidden';
-      });
       document.querySelectorAll('.menu li.is-open').forEach((el) => {
         el.classList.remove('is-open');
+        el.querySelector(':scope > a').setAttribute('aria-expanded', 'false');
       });
+      setDrawer(false);
     }
 
     function closeMenuBranch(li) {
       li.classList.remove('is-open');
-      li.querySelectorAll('li.is-open').forEach((el) => el.classList.remove('is-open'));
-      li.querySelectorAll('ul').forEach((el) => {
-        el.style.visibility = 'hidden';
+      li.querySelector(':scope > a').setAttribute('aria-expanded', 'false');
+      li.querySelectorAll('li.is-open').forEach((el) => {
+        el.classList.remove('is-open');
+        el.querySelector(':scope > a').setAttribute('aria-expanded', 'false');
       });
     }
 
-    function resetMenu() {
-      document.querySelectorAll('.menu ul ul').forEach((el) => {
-        el.style.visibility = '';
-      });
+    // Sidebar is a drawer below the drawer breakpoint (see style.css)
+    const isDrawerMode = () => window.matchMedia('(max-width: 720px)').matches;
+
+    function setDrawer(open) {
+      const main = document.querySelector('.main');
+      if (!main) return;
+      main.classList.toggle('menu-open', open);
+      const toggle = document.getElementById('menuToggle');
+      if (toggle) toggle.setAttribute('aria-expanded', String(open));
     }
 
-    // Mobile submenu tap-to-expand
-    function initMobileSubmenus() {
+    function toggleDrawer() {
+      setDrawer(!document.querySelector('.main').classList.contains('menu-open'));
+    }
+
+    // Collapsible submenus, expandable by click/tap on every device
+    function initMenu() {
       document.querySelectorAll('.menu li').forEach((li) => {
         const link = li.querySelector(':scope > a');
         const sub = li.querySelector(':scope > ul');
         if (!sub || !link) return;
 
-        link.addEventListener('click', (e) => {
-          // Allow standard hover on desktop devices that support true hover with a fine pointer
-          if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+        link.setAttribute('aria-expanded', 'false');
 
+        link.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
 
@@ -120,43 +128,92 @@
             if (el !== li) closeMenuBranch(el);
           });
 
-          if (willOpen) {
-            sub.style.visibility = 'visible';
-            li.classList.add('is-open');
-          } else {
-            closeMenuBranch(li);
-          }
+          li.classList.toggle('is-open', willOpen);
+          link.setAttribute('aria-expanded', String(willOpen));
         });
       });
 
-      // Close menu when clicking a leaf link or somewhere outside of menu tree
       const menu = document.querySelector('.menu');
-      if (menu) {
-        menu.addEventListener('click', (e) => {
-          const a = e.target.closest('a');
-          if (!a || a.parentElement.querySelector(':scope > ul')) return;
-          closeMenu();
-        });
-        document.addEventListener('click', (e) => {
-          if (menu && !menu.contains(e.target)) {
-            closeMenu();
-          }
-        });
-      }
+      if (!menu) return;
+
+      // Close menu when clicking a leaf link or somewhere outside of menu tree
+      menu.addEventListener('click', (e) => {
+        const a = e.target.closest('a');
+        if (!a || a.parentElement.querySelector(':scope > ul')) return;
+        closeMenu();
+      });
+
+      document.addEventListener('click', (e) => {
+        if (menu.contains(e.target) || e.target.closest('#menuToggle')) return;
+        closeMenu();
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        closeMenu();
+      });
+
+      // Header height for the drawer's top offset
+      const header = document.querySelector('.header');
+      const setHeaderHeight = () => document.documentElement.style.setProperty('--header-h', `${header.offsetHeight}px`);
+      setHeaderHeight();
+      window.addEventListener('resize', setHeaderHeight);
+
+      initSwipeGestures();
     }
-    window.addEventListener('DOMContentLoaded', initMobileSubmenus);
+
+    // Swipe from the left edge to open the drawer, swipe left to close it
+    function initSwipeGestures() {
+      let startX = 0;
+      let startY = 0;
+      let tracking = false;
+
+      document.addEventListener('touchstart', (e) => {
+        if (!isDrawerMode()) return;
+        const open = document.querySelector('.main').classList.contains('menu-open');
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        tracking = open || startX <= 24;
+      }, { passive: true });
+
+      document.addEventListener('touchend', (e) => {
+        if (!tracking) return;
+        tracking = false;
+        const dx = e.changedTouches[0].clientX - startX;
+        const dy = Math.abs(e.changedTouches[0].clientY - startY);
+        if (dy > 50 || Math.abs(dx) < 60) return;
+
+        const open = document.querySelector('.main').classList.contains('menu-open');
+        if (!open && dx > 0) setDrawer(true);
+        if (open && dx < 0) setDrawer(false);
+      }, { passive: true });
+    }
+    window.addEventListener('DOMContentLoaded', initMenu);
   </script>
 </head>
 
 <body>
+  <svg class="icon-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18" /></symbol>
+    <symbol id="i-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></symbol>
+    <symbol id="i-data" viewBox="0 0 24 24"><path d="M3 21h18" /><rect x="5" y="12" width="3" height="6" rx="1" /><rect x="11" y="7" width="3" height="11" rx="1" /><rect x="17" y="3" width="3" height="15" rx="1" /></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2.2" /><circle cx="10" cy="17" r="2.2" /></symbol>
+    <symbol id="i-system" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" /><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3" /></symbol>
+    <symbol id="i-control" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" /></symbol>
+  </svg>
+
   <div class="main">
     <header class="header">
+      <button type="button" class="menu-toggle" id="menuToggle" aria-label="Menu" aria-controls="mainmenu"
+        aria-expanded="false" onclick="toggleDrawer()">
+        <svg class="icon" aria-hidden="true"><use href="#i-menu" /></svg>
+      </button>
       <div class="header-main">
         <img src="favicon.ico" alt="ico" class="brand-logo" />
         <div class="brand-text">
           <h1 class="brand-font">AI-on-the-Edge Device</h1>
           <div class="device-name">
-            <span>Device Name: </span>
+            <span class="device-name-label">Device Name: </span>
             <span id="device-name">Loading...</span>
           </div>
         </div>
@@ -177,12 +234,12 @@
       </label>
     </header>
 
-    <nav class="menu" onmouseover="resetMenu()">
+    <nav class="menu" id="mainmenu">
       <ul>
-        <li><a onclick="loadPage('dashboard.html?v=$COMMIT_HASH')">Dashboard</a></li>
+        <li><a onclick="loadPage('dashboard.html?v=$COMMIT_HASH')"><svg class="icon" aria-hidden="true"><use href="#i-dashboard" /></svg><span>Dashboard</span></a></li>
 
         <li>
-          <a>Data<i class="arrow down"></i></a>
+          <a><svg class="icon" aria-hidden="true"><use href="#i-data" /></svg><span>Data</span><i class="arrow right"></i></a>
           <ul class="submenu">
             <li><a onclick="loadPage(getDomainname() + '/recognition_details')">Recognition Details</a></li>
             <li><a onclick="loadPage('data_charts.html?v=$COMMIT_HASH')">Data Charts</a></li>
@@ -191,7 +248,7 @@
         </li>
 
         <li>
-          <a>Settings<i class="arrow down"></i></a>
+          <a><svg class="icon" aria-hidden="true"><use href="#i-settings" /></svg><span>Settings</span><i class="arrow right"></i></a>
           <ul class="submenu">
             <li><a onclick="loadPage('edit_fallbackvalue.html?v=$COMMIT_HASH')">Set Fallback Value</a></li>
             <li><a onclick="loadPage('edit_configuration.html?v=$COMMIT_HASH')">Configuration</a></li>
@@ -202,7 +259,7 @@
         </li>
 
         <li>
-          <a>System<i class="arrow down"></i></a>
+          <a><svg class="icon" aria-hidden="true"><use href="#i-system" /></svg><span>System</span><i class="arrow right"></i></a>
           <ul class="submenu">
             <li><a onclick="loadPage('sys_backup.html?v=$COMMIT_HASH')">Backup / Restore</a></li>
             <li><a onclick="loadPage('sys_ota.html?v=$COMMIT_HASH')">OTA Update</a></li>
@@ -230,7 +287,7 @@
         </li>
 
         <li>
-          <a>Control<i class="arrow down"></i></a>
+          <a><svg class="icon" aria-hidden="true"><use href="#i-control" /></svg><span>Control</span><i class="arrow right"></i></a>
           <ul class="submenu">
             <li><a onclick="manualCycleStart()">Start Cycle</a></li>
             <li id="HASendDiscovery" style="display: none">
@@ -240,6 +297,8 @@
         </li>
       </ul>
     </nav>
+
+    <div class="menu-backdrop" onclick="setDrawer(false)"></div>
 
     <iframe title="maincontent" class="iframe" id="maincontent"></iframe>
   </div>

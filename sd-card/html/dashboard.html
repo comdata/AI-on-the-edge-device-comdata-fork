@@ -4,7 +4,7 @@
 <head>
   <title>Dashboard</title>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=720" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <script>
     // Theme Control
@@ -147,8 +147,23 @@
         gap: 20px;
       }
 
+      .data-panel {
+        flex: 0 0 auto;
+        width: 100%;
+      }
+
       #img {
-        min-height: 440px;
+        min-height: 0;
+      }
+    }
+
+    @media screen and (max-width: 480px) {
+      .refresh-group {
+        gap: 8px;
+      }
+
+      .label {
+        width: 90px;
       }
     }
   </style>

@@ -4,7 +4,7 @@
 <head>
   <title>Data Charts</title>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=720" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <script>
     // Theme Control
@@ -77,6 +77,17 @@
     .chart {
       width: 100%;
       min-height: 450px;
+    }
+
+    @media screen and (max-width: 720px) {
+      .controls-row {
+        flex-wrap: wrap;
+        white-space: normal;
+      }
+
+      .chart {
+        min-height: 340px;
+      }
     }
   </style>
 

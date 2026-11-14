@@ -4,7 +4,7 @@
 <head>
   <title>AI-on-the-Edge Device | Initial Setup Wizard</title>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=720" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <script>
     // Theme Control
@@ -237,6 +237,45 @@
       height: 480px;
       margin: 0 auto;
       object-fit: contain;
+    }
+
+    @media screen and (max-width: 720px) {
+      html,
+      body {
+        max-width: 100%;
+      }
+
+      .header-controls {
+        gap: 12px;
+      }
+
+      #preview_img {
+        height: auto;
+        max-width: 100%;
+      }
+
+      #preview_img.is-loading {
+        height: 120px;
+      }
+
+      .info-box {
+        margin: 20px 0;
+      }
+
+      .table {
+        table-layout: auto;
+      }
+
+      .table colgroup {
+        display: none;
+      }
+
+      input[type='text'],
+      input[type='password'] {
+        min-width: 0;
+        width: 100%;
+        max-width: 100%;
+      }
     }
   </style>
 

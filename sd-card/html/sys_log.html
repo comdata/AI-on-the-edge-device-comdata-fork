@@ -4,7 +4,7 @@
 <head>
   <title>Log Viewer</title>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=720" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <script>
     // Theme Control
@@ -379,6 +379,34 @@
 
       .col-mod {
         width: 110px;
+      }
+
+      .controls-row {
+        flex-wrap: wrap;
+        white-space: normal;
+      }
+
+      .header-row {
+        flex-wrap: wrap;
+        row-gap: 8px;
+      }
+    }
+
+    @media screen and (max-width: 480px) {
+      .col-mod {
+        display: none;
+      }
+
+      .col-lvl {
+        width: 44px;
+      }
+
+      .col-ts {
+        width: 118px;
+      }
+
+      .log-row {
+        padding: 0 6px;
       }
     }
   </style>

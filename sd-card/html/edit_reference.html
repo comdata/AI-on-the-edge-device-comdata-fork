@@ -4,7 +4,7 @@
 <head>
   <title>Reference Image</title>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=720" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <script>
     // Theme Control
@@ -87,6 +87,27 @@
     td:has(.tooltip-trigger) {
       text-align: right;
       padding-right: 5px;
+    }
+
+    @media screen and (max-width: 720px) {
+      .camParameter-table {
+        table-layout: auto;
+        min-width: 620px;
+      }
+
+      .camParameter-table colgroup {
+        display: none;
+      }
+
+      .header-actions {
+        flex-wrap: wrap;
+      }
+
+      #tooltip-portal {
+        min-width: 0 !important;
+        width: min(325px, 92vw) !important;
+        max-width: 92vw !important;
+      }
     }
   </style>
 

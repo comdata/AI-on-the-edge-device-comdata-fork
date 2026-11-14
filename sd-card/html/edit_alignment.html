@@ -4,7 +4,7 @@
 <head>
   <title>Alignment marker</title>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=720" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <script>
     // Theme Control
@@ -57,6 +57,17 @@
       width: 100%;
       padding: 5px 0px 5px 0px;
       table-layout: fixed;
+    }
+
+    @media screen and (max-width: 720px) {
+      table {
+        table-layout: auto;
+        min-width: 560px;
+      }
+
+      table colgroup {
+        display: none;
+      }
     }
   </style>
 
