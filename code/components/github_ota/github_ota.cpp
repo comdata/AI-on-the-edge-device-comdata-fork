@@ -316,8 +316,12 @@ static int downloadAttempt(const std::string &url, DownloadContext &context, std
     config.user_data = &context;
 
     context.location.clear();
+    LogFile.writeToFile(ESP_LOG_INFO, TAG,
+                        "Attempt (" + std::to_string(url.size()) + " chars): " + url.substr(0, 140) +
+                            (url.size() > 140 ? "…" : ""));
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (client == NULL) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Client init failed");
         return -1;
     }
     esp_http_client_set_header(client, "Accept", "application/octet-stream");
@@ -325,14 +329,18 @@ static int downloadAttempt(const std::string &url, DownloadContext &context, std
     esp_err_t err = esp_http_client_open(client, 0);
     if (err != ESP_OK) {
         LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Open failed: " + std::string(esp_err_to_name(err)) + " (" +
-                                                     std::to_string((int)err) + ")");
+                                                     std::to_string((int)err) + "), heap: " +
+                                                     std::to_string(esp_get_free_heap_size()));
         esp_http_client_cleanup(client);
         return -1;
     }
 
-    esp_http_client_fetch_headers(client);
+    int64_t contentLength = esp_http_client_fetch_headers(client);
     int status = esp_http_client_get_status_code(client);
     location = context.location;
+    LogFile.writeToFile(ESP_LOG_INFO, TAG,
+                        "Status " + std::to_string(status) + ", length: " + std::to_string(contentLength) +
+                            ", location: " + std::to_string(location.size()) + " chars");
 
     if (status == 200) {
         char buffer[DOWNLOAD_BUFFER];
