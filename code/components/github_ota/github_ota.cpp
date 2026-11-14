@@ -13,7 +13,7 @@
 #include "ClassLogFile.h"
 #include "helper.h"
 #include "time_sntp.h"
-#include "version.h"
+#include "../../main/version.h"
 
 
 static const char *TAG = "GITHUB_OTA";
