@@ -290,6 +290,48 @@ bool githubOtaCheck(GitHubOtaInfo &info, const std::string &repoOverride)
 }
 
 
+// One download attempt; returns the HTTP status and the redirect target.
+static int downloadAttempt(const std::string &url, DownloadContext &context, std::string &location)
+{
+    esp_http_client_config_t config = {};
+    config.url = url.c_str();
+    config.user_agent = "AI-on-the-Edge Device";
+    config.method = HTTP_METHOD_GET;
+    config.timeout_ms = 30000;
+    config.buffer_size = DOWNLOAD_BUFFER;
+    config.crt_bundle_attach = esp_crt_bundle_attach;
+    // Handle the redirect to the asset host ourselves: the location is needed
+    // for the next attempt and the body of a redirect must not be written.
+    config.disable_auto_redirect = true;
+    config.event_handler = downloadEventHandler;
+    config.user_data = &context;
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (client == NULL) {
+        return -1;
+    }
+    esp_http_client_set_header(client, "Accept", "application/octet-stream");
+
+    esp_err_t err = esp_http_client_perform(client);
+    int status = (err == ESP_OK) ? esp_http_client_get_status_code(client) : -1;
+
+    if (status >= 300 && status < 400) {
+        char *header = NULL;
+        if (esp_http_client_get_header(client, "Location", &header) == ESP_OK && header != NULL) {
+            location = header;
+        }
+    }
+
+    esp_http_client_cleanup(client);
+
+    if (err != ESP_OK) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Request failed: " + std::string(esp_err_to_name(err)) +
+                                                     " (" + std::to_string((int)err) + ")");
+    }
+    return status;
+}
+
+
 esp_err_t githubOtaDownload(const GitHubOtaInfo &info)
 {
     if (info.assetUrl.empty()) {
@@ -308,38 +350,31 @@ esp_err_t githubOtaDownload(const GitHubOtaInfo &info)
         return ESP_FAIL;
     }
 
-    DownloadContext context = {file, 0, false};
-    esp_http_client_config_t config = {};
-    config.url = info.assetUrl.c_str();
-    config.user_agent = "AI-on-the-Edge Device";
-    config.method = HTTP_METHOD_GET;
-    config.timeout_ms = 30000;
-    config.buffer_size = DOWNLOAD_BUFFER;
-    config.crt_bundle_attach = esp_crt_bundle_attach;
-    config.max_redirection_count = 5;
-    // Data is written from the event handler: esp_http_client_perform follows
-    // the GitHub redirect to the asset host, esp_http_client_open would not.
-    config.event_handler = downloadEventHandler;
-    config.user_data = &context;
+    DownloadContext context = {};
+    context.file = file;
 
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (client == NULL) {
-        fclose(file);
-        return ESP_ERR_NO_MEM;
+    std::string url = info.assetUrl;
+    int status = 0;
+    bool success = false;
+
+    for (int hop = 0; hop < 6; hop++) {
+        std::string location;
+        status = downloadAttempt(url, context, location);
+        if (status == 200) {
+            success = true;
+            break;
+        }
+        if (status >= 300 && status < 400 && !location.empty()) {
+            LogFile.writeToFile(ESP_LOG_DEBUG, TAG, "Following redirect: " + location);
+            url = location;
+            continue;
+        }
+        break;
     }
-    esp_http_client_set_header(client, "Accept", "application/octet-stream");
 
-    esp_err_t err = esp_http_client_perform(client);
-    int status = esp_http_client_get_status_code(client);
-    esp_http_client_cleanup(client);
     fclose(file);
 
-    if (err != ESP_OK) {
-        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Download failed: " + std::string(esp_err_to_name(err)));
-        deleteFile(GITHUB_OTA_ZIP_PATH);
-        return err;
-    }
-    if (status != 200) {
+    if (!success) {
         LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Download failed with HTTP " + std::to_string(status));
         deleteFile(GITHUB_OTA_ZIP_PATH);
         return ESP_ERR_INVALID_RESPONSE;
