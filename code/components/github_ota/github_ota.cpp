@@ -61,14 +61,6 @@ struct DownloadContext {
 };
 
 
-struct DownloadContext {
-    FILE *file = NULL;
-    size_t written = 0;
-    bool writeFailed = false;
-    size_t expected = 0; // Content-Length of the answer
-};
-
-
 static esp_err_t downloadEventHandler(esp_http_client_event_t *event)
 {
     if (event->event_id != HTTP_EVENT_ON_DATA || event->user_data == NULL) {
