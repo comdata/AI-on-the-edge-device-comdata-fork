@@ -53,6 +53,8 @@ ClassFlowControl::ClassFlowControl()
     flowWebhook = NULL;
 #endif // ENABLE_WEBHOOK
 
+    flowHomeAssistant = NULL;
+
     setActualProcessState(std::string(FLOW_NO_TASK));
     flowStateErrorInRow = 0;
     flowStateDeviationInRow = 0;
@@ -205,6 +207,14 @@ bool ClassFlowControl::initFlow()
     }
 #endif // ENABLE_WEBHOOK
 
+    // Home Assistant API publishing (configured in /config/homeassistant.json)
+    flowHomeAssistant = new ClassFlowHomeAssistant();
+    FlowControlPublish.push_back(flowHomeAssistant);
+    if (!flowHomeAssistant->loadParameter()) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Home Assistant API: Init failed");
+        retVal = false;
+    }
+
     // Load parameter handled in this class
     this->loadParameter();
 
@@ -225,6 +235,9 @@ void ClassFlowControl::deinitFlow(void)
     flowWebhook = NULL;
     // LogFile.writeHeapInfo("After WEBHOOK");
 #endif // ENABLE_WEBHOOK
+
+    delete flowHomeAssistant;
+    flowHomeAssistant = NULL;
 
 #ifdef ENABLE_INFLUXDB
     delete flowInfluxDBv2;
@@ -544,6 +557,9 @@ std::string ClassFlowControl::translateActualProcessState(std::string classname)
         return std::string(FLOW_PUBLISH_WEBHOOK);
     }
 #endif // ENABLE_WEBHOOK
+    else if (classname.compare("ClassFlowHomeAssistant") == 0) {
+        return std::string(FLOW_PUBLISH_HOMEASSISTANT);
+    }
     else {
         return "Unkown State (" + classname + ")";
     }
