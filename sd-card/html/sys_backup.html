@@ -238,7 +238,7 @@
         String(now.getHours()).padStart(2, "0") + "-" + String(now.getMinutes()).padStart(2, "0") + "-" + String(now.getSeconds()).padStart(2, "0");
 
       // Add backup meta data
-      const meta = { app: "AI-on-the-Edge Device [SLFork]", timestamp: timestamp };
+      const meta = { app: "AI-on-the-Edge Device [comdataFork]", timestamp: timestamp };
       zipFiles["meta.json"] = new TextEncoder().encode(JSON.stringify(meta, null, 2));
 
       try {

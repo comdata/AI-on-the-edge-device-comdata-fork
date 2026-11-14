@@ -84,13 +84,13 @@ jobs:
         rm -rf ./artifacts
         mkdir -p ./artifacts
         gh release download "$RELEASE_TAG" \
-          --pattern "AI-on-the-edge-device__${PLAT}__SLFork_*.zip" \
+          --pattern "AI-on-the-edge-device__${PLAT}__comdataFork_*.zip" \
           --dir ./artifacts
 
     - name: Prepare data
       run: |
         echo "Updating files ..."
-        unzip -o ./artifacts/AI-on-the-edge-device__${PLAT}__SLFork_*.zip -d ./artifacts/pkg
+        unzip -o ./artifacts/AI-on-the-edge-device__${PLAT}__comdataFork_*.zip -d ./artifacts/pkg
 
         rm -rf "./firmware/${PLAT}"
         mkdir -p "./firmware/${PLAT}"

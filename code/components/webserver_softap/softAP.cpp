@@ -74,7 +74,7 @@ progress{width:100%;height:10px;margin-top:16px;accent-color:var(--primary)}
 .ok{color:var(--success)}.err{color:var(--error)}
 </style></head>)HTML";
 
-static const char PAGE_COMMON[] = R"HTML(<div class="header"><p class="brand-font">AI-on-the-Edge Device [SLFork]</p>
+static const char PAGE_COMMON[] = R"HTML(<div class="header"><p class="brand-font">AI-on-the-Edge Device [comdataFork]</p>
 <p class="device-name">Device Provisioning</p></div>
 <main><ol class="steps"><li class="s1"> 1 &middot; NETWORK</li><li class="s2"> 2 &middot; FIRMWARE</li></ol>)HTML";
 

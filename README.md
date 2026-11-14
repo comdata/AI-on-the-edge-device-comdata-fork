@@ -1,6 +1,6 @@
 <h1>
   <img src="images/icon/watermeter.svg" width="40px" style="vertical-align: middle;">
-  <span style="vertical-align: middle;">AI-on-the-Edge Device [SLFork]</span>
+  <span style="vertical-align: middle;">AI-on-the-Edge Device [comdataFork]</span>
 </h1>
 
 Artificial intelligence is everywhere — from speech recognition to image analysis. While traditional AI often relies on powerful cloud 
@@ -28,7 +28,7 @@ you can turn any standard meter into a smart, connected device.
 - **API Design** – Relevant APIs use JSON notation for seamless integration
 - **TLS Support** – Secure connection supported for MQTT, InfluxDB and Webhook
 
-Further refinements are documented in the [changelog](CHANGELOG.md) (v16.0.0-SLFork and newer).
+Further refinements are documented in the [changelog](CHANGELOG.md) (starting at v16.0.0).
 
 
 ## APIs & Integrations
