@@ -1,5 +1,12 @@
 # Changelog
 
+## [18.1.0-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.0.1-comdataFork...v18.1.0-comdataFork) (2026-11-15)
+
+
+### Features
+
+* **webui:** language selection in the menu with German translation ([cf8215f](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/cf8215f5b61674d29f59d4085cc4fe7e3339e345))
+
 ## [18.0.1-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.0.0-comdataFork...v18.0.1-comdataFork) (2026-11-14)
 
 
