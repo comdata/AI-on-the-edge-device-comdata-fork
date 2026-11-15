@@ -53,7 +53,14 @@ carries the v18 line (WebUI rework, `code/components/*`, per-board sdkconfigs).
 A merge probe (2026-11-15) gives 152 conflicted files; a merge would trade one
 codebase for another. Take individual fixes from it by hand instead, if ever.
 
-Fetch without adding remotes: `git fetch https://github.com/Slider0007/AI-on-the-edge-device develop:refs/remotes/upstream/develop`.
+It is set up as the git remote `upstream` (push disabled), so the regular merge is:
+
+```bash
+git fetch upstream && git merge upstream/develop
+```
+
+Merge it often (it is the only source of shared fixes) and resolve conflicts in
+favour of this fork's v18 + comdata changes.
 
 ## Release and OTA deployment
 
