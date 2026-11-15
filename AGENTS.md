@@ -141,6 +141,11 @@ Without `jq`/`python3` on the HAOS host shell, inspect the registry with
 `ssh root@192.168.1.156 'jq … /config/.storage/core.entity_registry'` and call services
 through HA's REST API (`POST /api/services/…`) with a long-lived token.
 
+A broken `services.yaml` does not break the integration: Home Assistant only logs
+`Unable to parse services.yaml …` and the service form in the UI stays empty, so check
+`ha core logs -n 3000 | grep services.yaml` after deploying one. A number selector's
+`step` must be at least `0.001`.
+
 Consumers that must follow the reading entity: the `utility_meter` helper "Wasser pro Tag"
 (`sensor.wasserzaehler_wasser_pro_tag`), the Energy dashboard's water source
 (`ha_manage_energy_prefs`), and the NSPanel blueprints (`automation.panelbad`,
