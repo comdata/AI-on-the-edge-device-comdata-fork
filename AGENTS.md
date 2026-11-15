@@ -43,6 +43,18 @@ changes. Either reboot (`/reboot`) or post the same full config to
 `POST /config?reload=true`, which reinitializes the process in place (no reboot
 needed; masked fields `******` mean "keep stored value").
 
+## Upstreams
+
+`Slider0007/AI-on-the-edge-device` (`develop`) is the real upstream — merge it, it
+carries the v18 line (WebUI rework, `code/components/*`, per-board sdkconfigs).
+
+`jomjol/AI-on-the-edge-device` (`main`) is **not** an upstream: both lines split on
+2023-04-19 and developed separately (jomjol at v16.1.0 with `jomjol_*` components).
+A merge probe (2026-11-15) gives 152 conflicted files; a merge would trade one
+codebase for another. Take individual fixes from it by hand instead, if ever.
+
+Fetch without adding remotes: `git fetch https://github.com/Slider0007/AI-on-the-edge-device develop:refs/remotes/upstream/develop`.
+
 ## Release and OTA deployment
 
 Releases come from `develop`: merge the release PR from
