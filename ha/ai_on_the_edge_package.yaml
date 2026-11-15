@@ -1,0 +1,54 @@
+# Home Assistant package for an AI on the Edge device that publishes its values
+# through the Home Assistant REST API (firmware feature, see HA_API.md).
+#
+# The device is the server for its configuration, so Home Assistant steers it
+# with rest_command. Replace host and credentials, then include this file from
+# configuration.yaml:
+#
+#   homeassistant:
+#     packages:
+#       ai_on_the_edge: !include ha/ai_on_the_edge_package.yaml
+#
+# Only needed without the custom integration: it offers the same actions as
+# ai_on_the_edge.set_config (merged, applied with ?reload=true) and
+# ai_on_the_edge.set_fallback_value, plus a button for /cycle_start and /reboot.
+
+rest_command:
+  aioe_trigger_cycle:
+    url: "http://10.0.1.20/cycle_start"
+    method: GET
+    username: !secret aioe_user
+    password: !secret aioe_password
+
+  aioe_set_config:
+    url: "http://10.0.1.20/config"
+    method: POST
+    content_type: "application/json"
+    payload: "{{ config }}"
+    username: !secret aioe_user
+    password: !secret aioe_password
+
+  aioe_set_fallback_value:
+    url: "http://10.0.1.20/set_fallbackvalue?sequence={{ sequence | default('main') }}&value={{ value | default('-1') }}"
+    method: GET
+    username: !secret aioe_user
+    password: !secret aioe_password
+
+  aioe_reboot:
+    url: "http://10.0.1.20/reboot"
+    method: GET
+    username: !secret aioe_user
+    password: !secret aioe_password
+
+# Example: set the process interval to two minutes
+script:
+  aioe_set_interval_two_minutes:
+    sequence:
+      - service: rest_command.aioe_set_config
+        data:
+          config: '{"operationmode": {"automaticprocessinterval": "2.00"}}'
+
+# Example: start a measurement now
+  aioe_measure_now:
+    sequence:
+      - service: rest_command.aioe_trigger_cycle

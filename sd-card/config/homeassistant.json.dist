@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "url": "http://homeassistant.local:8123",
+  "token": "<long-lived-access-token>",
+  "entity_prefix": "ai_on_the_edge",
+  "publish_rate": true
+}

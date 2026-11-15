@@ -1,0 +1,50 @@
+set_config:
+  name: Write configuration
+  description: >-
+    Merges a partial configuration into the device's stored config and applies it
+    without a reboot.
+  fields:
+    entry_id:
+      name: Device
+      description: Only needed when several devices are set up.
+      required: false
+      selector:
+        config_entry:
+          integration: ai_on_the_edge
+    config:
+      name: Configuration
+      description: Partial config, merged into the stored one.
+      required: true
+      example: '{"operationmode": {"automaticprocessinterval": "2.00"}}'
+      selector:
+        object:
+
+set_fallback_value:
+  name: Set fallback value
+  description: >-
+    Overrides the reading of a number sequence; -1 clears the fallback value.
+  fields:
+    entry_id:
+      name: Device
+      description: Only needed when several devices are set up.
+      required: false
+      selector:
+        config_entry:
+          integration: ai_on_the_edge
+    sequence:
+      name: Number sequence
+      required: false
+      default: main
+      example: main
+      selector:
+        text:
+    value:
+      name: Value
+      description: Reading in m³, -1 to clear.
+      required: true
+      example: -1
+      selector:
+        number:
+          mode: box
+          step: 0.001
+          min: -1

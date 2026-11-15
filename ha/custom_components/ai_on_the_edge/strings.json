@@ -1,0 +1,109 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "AI on the Edge device",
+        "description": "Host, credentials and polling interval of the device.",
+        "data": {
+          "host": "Host or IP address",
+          "port": "Port",
+          "username": "User (WebUI login)",
+          "password": "Password",
+          "scan_interval": "Polling interval (seconds)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate",
+        "description": "The device {host} refused the stored WebUI credentials.",
+        "data": {
+          "username": "User (WebUI login)",
+          "password": "Password"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure device",
+        "description": "Host, credentials and polling interval of the device.",
+        "data": {
+          "host": "Host or IP address",
+          "port": "Port",
+          "username": "User (WebUI login)",
+          "password": "Password",
+          "scan_interval": "Polling interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Device not reachable",
+      "auth": "Wrong user name or password",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "This device is already set up",
+      "reauth_successful": "The credentials were updated",
+      "reconfigure_successful": "The device settings were updated"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Device settings",
+        "description": "Leave the password empty to keep the stored one.",
+        "data": {
+          "port": "Port",
+          "username": "User (WebUI login)",
+          "password": "Password",
+          "scan_interval": "Polling interval (seconds)",
+          "camera_image": "Camera image",
+          "use_ssl": "Use HTTPS",
+          "verify_ssl": "Verify TLS certificate"
+        }
+      }
+    }
+  },
+  "entity": {
+    "camera": {
+      "camera": {"name": "Camera"}
+    },
+    "binary_sensor": {
+      "problem": {"name": "Problem"}
+    },
+    "button": {
+      "start_cycle": {"name": "Start measurement"},
+      "reboot": {"name": "Restart device"}
+    },
+    "sensor": {
+      "value": {"name": "Reading{sequence}"},
+      "raw_value": {"name": "Raw value{sequence}"},
+      "rate": {"name": "Flow rate{sequence}"},
+      "value_status": {"name": "Value status{sequence}"},
+      "last_cycle": {"name": "Last measurement{sequence}"},
+      "firmware": {"name": "Firmware"},
+      "uptime": {"name": "Uptime"},
+      "wifi_signal": {"name": "Wi-Fi signal"},
+      "cpu_temperature": {"name": "CPU temperature"},
+      "process_status": {"name": "Process status"},
+      "process_state": {"name": "Process state"},
+      "process_error": {"name": "Process error"},
+      "cycle_counter": {"name": "Cycles"}
+    }
+  },
+  "services": {
+    "set_config": {
+      "name": "Write configuration",
+      "description": "Merges a partial configuration into the device's config and applies it without a reboot.",
+      "fields": {
+        "entry_id": {"name": "Device", "description": "Only needed when several devices are set up."},
+        "config": {"name": "Configuration", "description": "Partial config, merged into the stored one."}
+      }
+    },
+    "set_fallback_value": {
+      "name": "Set fallback value",
+      "description": "Overrides the meter reading of a number sequence; -1 clears the fallback.",
+      "fields": {
+        "entry_id": {"name": "Device", "description": "Only needed when several devices are set up."},
+        "sequence": {"name": "Number sequence"},
+        "value": {"name": "Value", "description": "Reading in m³, -1 to clear."}
+      }
+    }
+  }
+}

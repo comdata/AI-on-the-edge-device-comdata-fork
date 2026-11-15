@@ -974,7 +974,7 @@
           }
           if (jsonConfig.gpio.gpiopin[i].gpiousage.substring(0, 10) == 'restricted') {
             $('#gpio_gpiopin_pinmode_restrictedusagetext')
-              .text('(⚠ DEFAULT: ' + jsonConfig.gpio.gpiopin[i].gpiousage.substring(12).replace(/\-/g, ' ').toUpperCase() + ')')
+              .text('(DEFAULT: ' + jsonConfig.gpio.gpiopin[i].gpiousage.substring(12).replace(/\-/g, ' ').toUpperCase() + ')')
               .show();
           } else {
             $('#gpio_gpiopin_pinmode_restrictedusagetext').hide();

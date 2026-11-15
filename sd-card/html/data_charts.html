@@ -99,17 +99,16 @@
   <div class="container">
     <div class="container-header">
       <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; width: 100%">
-        <div class="container-title"><span>📈</span>Data Charts</div>
+        <div class="container-title">Data Charts</div>
         <div id="status" style="color: var(--text-secondary); font-style: italic"></div>
         <div class="refresh-group">
           <div id="autoRefreshSettings" class="refresh-settings is-disabled">
             <input type="checkbox" id="autoRefreshCtrl" onchange="autoRefreshContent()" />
             <label for="autoRefreshCtrl">Auto Refresh</label>
-            <span>(</span>
             <span class="timer-wrap">
               <input type="number" id="autoRefreshTime" min="1" value="60" onchange="if (value < 1) value = 1; autoRefreshContent();" />
             </span>
-            <span>) s</span>
+            <span>s</span>
           </div>
 
           <div class="refresh-timestamp">
@@ -144,7 +143,7 @@
     </div>
     <div class="container-content">
       <div class="card">
-        <div class="card-header">📈 Trend</div>
+        <div class="card-header">Trend</div>
         <div class="card-body">
           <div style="margin-left: 10px" id="chartTrendLoadingText">
             <p>Loading chart ...</p>
@@ -153,7 +152,7 @@
         </div>
       </div>
       <div class="card">
-        <div class="card-header">📊 Total</div>
+        <div class="card-header">Total</div>
         <div class="card-body">
           <div style="margin-left: 10px" id="chartTotalLoadingText">
             <p>Loading chart ...</p>
@@ -162,7 +161,7 @@
         </div>
       </div>
       <div class="card">
-        <div class="card-header">📊 Cycle Stats</div>
+        <div class="card-header">Cycle Stats</div>
         <div class="card-body">
           <div style="margin-left: 10px" id="chartCycleStatsLoadingText">
             <p>Loading chart ...</p>
@@ -315,12 +314,14 @@
               gridcolor: gridColor,
               zerolinecolor: zeroLineColor,
               linecolor: lineColor,
+              automargin: true,
               tickfont: { color: textColor }
             },
             yaxis: {
               gridcolor: gridColor,
               zerolinecolor: zeroLineColor,
               linecolor: lineColor,
+              automargin: true,
               tickfont: { color: textColor }
             },
             legend: { bgcolor: bgColor, font: { color: textColor } },
@@ -343,7 +344,25 @@
       });
     }
 
+    function showChartEmpty(chartId, textId) {
+      const chart = document.getElementById(chartId);
+      if (chart) {
+        if (chart.data) Plotly.purge(chart);
+        chart.style.display = 'none';
+      }
+      const text = document.getElementById(textId);
+      if (text) text.innerHTML = '<p class="empty-state">No data in the selected time range</p>';
+    }
+
+    function showChart(chartId) {
+      const chart = document.getElementById(chartId);
+      if (chart) chart.style.display = '';
+    }
+
     function plotTrendChart({ x, actual, raw, fallback, ratePerMin, ratePerInterval }) {
+      if (!x || x.length === 0) return showChartEmpty('chartTrend', 'chartTrendLoadingText');
+      showChart('chartTrend');
+
       chartTraces = [
         { x, y: actual, name: 'Actual', type: 'scatter', mode: 'lines', line: { color: 'green' }, yaxis: 'y' },
         {
@@ -374,7 +393,7 @@
       const chartLayout = {
         autosize: true,
         uirevision: true,
-        xaxis: { title: { text: 'Date/Time', font: { size: 16 } }, type: 'date' },
+        xaxis: { title: { text: 'Date/Time', font: { size: 16 } }, type: 'date', automargin: true, nticks: 6 },
         yaxis: { title: { text: 'Value', font: { size: 16 } } },
         yaxis2: { title: { text: 'Rate', font: { size: 16 } }, overlaying: 'y', side: 'right' },
         hovermode: 'x unified',
@@ -434,6 +453,9 @@
     }
 
     function plotDailyTotalChart(dailyDates, dailyValues) {
+      if (!dailyDates || dailyDates.length === 0) return showChartEmpty('chartDailyTotal', 'chartTotalLoadingText');
+      showChart('chartDailyTotal');
+
       // Calculate range sum
       const totalSum = dailyValues.length > 0 ? dailyValues.reduce((a, b) => a + b, 0) : 0;
 
@@ -553,6 +575,9 @@
     }
 
     function plotCycleStatsChart(days, goodCounts, failedCounts) {
+      if (!days || days.length === 0) return showChartEmpty('chartCycleStats', 'chartCycleStatsLoadingText');
+      showChart('chartCycleStats');
+
       const traces = [
         {
           x: days,
@@ -620,6 +645,8 @@
 
       const { days, goodCounts, failedCounts } = evalCycleStats(dataSet.x, dataSet.status.map(String), startTime, endTime);
       plotCycleStatsChart(days, goodCounts, failedCounts);
+
+      document.getElementById('refreshTimestamp').value = new Date().toLocaleTimeString([], { hour12: false });
     }
 
     async function refreshContent(auto = false) {

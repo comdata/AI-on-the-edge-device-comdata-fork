@@ -157,6 +157,9 @@
       text-align: center;
       font-style: italic;
       color: var(--text-secondary);
+      /* The table scrolls sideways on phones; the message stays in view */
+      position: sticky;
+      left: 0;
     }
 
     table {
@@ -353,16 +356,15 @@
   <div class="container">
     <div class="container-header">
       <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; width: 100%">
-        <div class="container-title"><span>📋</span>Data Table</div>
+        <div class="container-title">Data Table</div>
         <div class="refresh-group">
           <div id="autoRefreshSettings" class="refresh-settings is-disabled">
             <input type="checkbox" id="autoRefreshCtrl" onchange="autoRefreshContent()" />
             <label for="autoRefreshCtrl"> Auto Refresh </label>
-            <span>(</span>
             <span class="timer-wrap">
               <input type="number" id="autoRefreshTime" min="1" value="60" onchange="if (value < 1) value = 1; autoRefreshContent();" />
             </span>
-            <span>) s</span>
+            <span>s</span>
           </div>
           <div class="refresh-timestamp">
             <span style="font-size: 14px">↻</span>
