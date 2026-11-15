@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "AI on the Edge device",
+        "description": "Host, credentials and polling interval of the device.",
+        "data": {
+          "host": "Host or IP address",
+          "port": "Port",
+          "username": "User (WebUI login)",
+          "password": "Password",
+          "scan_interval": "Polling interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Device not reachable",
+      "auth": "Wrong user name or password"
+    },
+    "abort": {
+      "already_configured": "This device is already set up"
+    }
+  },
+  "entity": {
+    "camera": {"camera": {"name": "Camera"}},
+    "sensor": {
+      "value": {"name": "Reading"},
+      "raw_value": {"name": "Raw value"},
+      "rate": {"name": "Flow rate"},
+      "value_status": {"name": "Value status"},
+      "firmware": {"name": "Firmware"},
+      "uptime": {"name": "Uptime"},
+      "wifi_signal": {"name": "Wi-Fi signal"},
+      "cpu_temperature": {"name": "CPU temperature"},
+      "process_status": {"name": "Process status"},
+      "cycle_counter": {"name": "Cycles"}
+    }
+  }
+}

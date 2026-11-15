@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "AI on the Edge Gerät",
+        "description": "Host, Zugangsdaten und Abfrageintervall des Geräts.",
+        "data": {
+          "host": "Host oder IP-Adresse",
+          "port": "Port",
+          "username": "Benutzer (WebUI-Login)",
+          "password": "Passwort",
+          "scan_interval": "Abfrageintervall (Sekunden)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Gerät nicht erreichbar",
+      "auth": "Benutzername oder Passwort falsch"
+    },
+    "abort": {
+      "already_configured": "Dieses Gerät ist bereits eingerichtet"
+    }
+  },
+  "entity": {
+    "camera": {"camera": {"name": "Kamera"}},
+    "sensor": {
+      "value": {"name": "Zählerstand"},
+      "raw_value": {"name": "Rohwert"},
+      "rate": {"name": "Durchfluss"},
+      "value_status": {"name": "Wertestatus"},
+      "firmware": {"name": "Firmware"},
+      "uptime": {"name": "Laufzeit"},
+      "wifi_signal": {"name": "WLAN-Signal"},
+      "cpu_temperature": {"name": "CPU-Temperatur"},
+      "process_status": {"name": "Prozessstatus"},
+      "cycle_counter": {"name": "Messzyklen"}
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "domain": "ai_on_the_edge",
+  "name": "AI on the Edge",
+  "codeowners": ["@christophmertins"],
+  "config_flow": true,
+  "documentation": "https://github.com/comdata/AI-on-the-edge-device-comdata-fork",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/comdata/AI-on-the-edge-device-comdata-fork/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}
