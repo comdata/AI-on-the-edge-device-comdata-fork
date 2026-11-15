@@ -226,7 +226,7 @@
     }
 
     .col-ts {
-      width: 220px;
+      width: 230px;
       flex-shrink: 0;
       display: flex;
       align-items: center;
@@ -254,10 +254,12 @@
 
     .time-full {
       color: var(--text-main);
+      white-space: nowrap;
     }
 
     .time-uptime {
-      color: var(--text-secondary)
+      color: var(--text-secondary);
+      white-space: nowrap;
     }
 
     .mod-cell {
@@ -359,26 +361,29 @@
         font-size: 14px;
       }
 
+      /* Phones: one line per row, no wrapping, so the virtual row heights stay exact */
       .col-ts {
-        width: 145px;
-        flex-direction: column;
-        align-items: flex-start;
-        justify-content: center;
-        gap: 1px;
+        width: auto;
+        flex: 0 0 auto;
+        flex-direction: row;
+        align-items: center;
+        gap: 6px;
       }
 
-      .col-ts .time-full,
-      .col-ts .time-uptime {
-        line-height: 1;
-        white-space: nowrap;
+      .col-ts .time-uptime,
+      .col-mod {
+        display: none;
       }
 
       .col-lvl {
-        width: 65px;
+        width: 58px;
+        padding-right: 6px;
       }
 
-      .col-mod {
-        width: 110px;
+      .col-msg {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .controls-row {
@@ -419,17 +424,16 @@
   <div class="container">
     <div class="container-header">
       <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; width: 100%">
-        <div class="container-title"><span>📋</span>Log Viewer</div>
+        <div class="container-title">Log Viewer</div>
         <div id="status" style="color: var(--text-secondary); font-style: italic"></div>
         <div class="refresh-group">
           <div id="autoRefreshSettings" class="refresh-settings is-disabled">
             <input type="checkbox" id="autoRefreshCtrl" onchange="autoRefreshContent()" />
             <label for="autoRefreshCtrl">Auto Refresh</label>
-            <span>(</span>
             <span class="timer-wrap">
               <input type="number" id="autoRefreshTime" min="1" value="5" onchange="if (value < 1) value = 1; autoRefreshContent();" />
             </span>
-            <span>) s</span>
+            <span>s</span>
           </div>
 
           <div class="refresh-timestamp">
@@ -584,9 +588,10 @@
       const isMobile = window.innerWidth <= 720;
 
       return {
-        BASE_ROW_HEIGHT: isMobile ? 34 : 24, // Default single-line height
-        LINE_HEIGHT: isMobile ? 22 : 18,     // Height added per extra line of wrapped text
-        CHARS_PER_LINE: isMobile ? 80 : 120  // Approx characters before message wraps
+        BASE_ROW_HEIGHT: isMobile ? 30 : 24, // Default single-line height
+        LINE_HEIGHT: isMobile ? 18 : 18,     // Height added per extra line of wrapped text
+        // Phones show every row on one line (CSS clips it), so a message never wraps there
+        CHARS_PER_LINE: isMobile ? 100000 : 120
       };
     }
 
@@ -749,7 +754,8 @@
         if (poolNode.idx !== dataIdx) {
           poolNode.idx = dataIdx;
           poolNode.uptime.textContent = item.uptime || '';
-          poolNode.ts.textContent = item.ts;
+          // Phones show the time only; the date is in the header range
+          poolNode.ts.textContent = window.innerWidth <= 720 ? item.ts.slice(11) : item.ts;
           poolNode.mod.textContent = item.mod;
           poolNode.msg.textContent = item.msg;
           poolNode.lvlPill.textContent = item.lvl;
@@ -867,9 +873,9 @@
 
         if (!res.ok) {
           if (res.error === 'timeout') {
-            elements.status.innerHTML = '⚠️ <b>Loading Timeout</b>';
+            elements.status.innerHTML = '<b>Loading Timeout</b>';
           } else if (res.error !== 'aborted') {
-            elements.status.innerHTML = '⚠️ <b>Loading Error</b>'; // toast already shown by the API layer
+            elements.status.innerHTML = '<b>Loading Error</b>'; // toast already shown by the API layer
           }
           return;
         }
@@ -878,7 +884,7 @@
         updateStats();
 
         if (res.data.includes('--TRUNCATED_SIZELIMIT--')) {
-          elements.status.innerHTML = '⚠️ <b>Log Truncated (Max. 5MB)</b>';
+          elements.status.innerHTML = '<b>Log Truncated (Max. 5MB)</b>';
         }
 
         elements.refreshTs.value = new Date().toLocaleTimeString([], { hour12: false });
@@ -887,7 +893,7 @@
         elements.bar.style.width = currentProgress + '%';
       } catch (e) {
         console.error('Log processing failed:', e);
-        elements.status.innerHTML = '⚠️ <b>Loading Error</b>';
+        elements.status.innerHTML = '<b>Loading Error</b>';
         firework.launch('Log processing failed', 'danger', 10000);
       } finally {
         elements.bar.style.width = '100%';
@@ -987,6 +993,11 @@
       const startTime = new Date(now.getTime() - 1 * 60 * 60 * 1000);
       const endOfDay = new Date(now);
       endOfDay.setHours(23, 59, 59, 999);
+
+      // The uptime column is hidden on phones, so its header label goes too
+      if (window.innerWidth <= 720) {
+        document.querySelector('.log-header-row .col-ts').textContent = 'Time';
+      }
 
       const format = (dt) => {
         const p = (n) => n.toString().padStart(2, '0');

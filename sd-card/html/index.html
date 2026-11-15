@@ -23,7 +23,9 @@
   <link rel="icon" type="image/x-icon" href="favicon.ico?v=$COMMIT_HASH" />
   <link rel="icon" type="image/svg+xml" href="icon.svg?v=$COMMIT_HASH" />
   <link rel="apple-touch-icon" sizes="180x180" href="/icon-apple-touch.png?v=$COMMIT_HASH" />
-  <link rel="manifest" type="application/manifest+json" href="/site.webmanifest?v=$COMMIT_HASH" />
+  <!-- Manifest inline: Chrome fetches /site.webmanifest without credentials, which the HTTP auth answers 401 -->
+  <link rel="manifest" type="application/manifest+json"
+    href='data:application/manifest+json,{"name":"AI-on-the-Edge Device","short_name":"AIotED","icons":[{"src":"/icon-android-chrome-192x192.png","sizes":"192x192","type":"image/png"},{"src":"/icon-android-chrome-512x512.png","sizes":"512x512","type":"image/png"}],"theme_color":"%23ffffff","background_color":"%23ffffff","display":"minimal-ui"}' />
   <link rel="stylesheet" href="style.css?v=$COMMIT_HASH" type="text/css" />
 
   <link href="firework.css?v=$COMMIT_HASH" rel="stylesheet" />
@@ -73,7 +75,31 @@
         UI.main.src = page;
       }
 
+      markCurrentPage(page);
       closeMenu();
+    }
+
+    // Highlight the menu entry of the page shown in the iframe
+    function markCurrentPage(page) {
+      document.querySelectorAll('.menu a[aria-current]').forEach((a) => a.removeAttribute('aria-current'));
+
+      const key = page.split('?')[0];
+      const link = [...document.querySelectorAll('.menu a')].find((a) => (a.getAttribute('onclick') || '').includes(key));
+      if (link) link.setAttribute('aria-current', 'page');
+    }
+
+    // Keyboard users reach the page content without tabbing through the whole menu
+    function focusMain() {
+      if (UI.main) UI.main.focus();
+    }
+
+    // The drawer and the backdrop start below the header, whose height depends on the width
+    function trackHeaderHeight() {
+      const header = document.querySelector('.header');
+      if (!header) return;
+      const apply = () => document.documentElement.style.setProperty('--header-h', `${header.offsetHeight}px`);
+      apply();
+      window.addEventListener('resize', apply);
     }
 
     function closeMenu() {
@@ -110,6 +136,15 @@
 
     // Collapsible submenus, expandable by click/tap on every device
     function initMenu() {
+      // Menu entries are links without href, which keeps them out of the tab order.
+      // Giving them a hash href makes them focusable; the click handler keeps it from jumping.
+      document.querySelectorAll('.menu a').forEach((a) => {
+        if (!a.hasAttribute('href')) a.setAttribute('href', '#');
+        a.addEventListener('click', (e) => {
+          if (a.getAttribute('href') === '#') e.preventDefault();
+        });
+      });
+
       document.querySelectorAll('.menu li').forEach((li) => {
         const link = li.querySelector(':scope > a');
         const sub = li.querySelector(':scope > ul');
@@ -203,13 +238,14 @@
   </svg>
 
   <div class="main">
+    <a class="skip-link" href="#maincontent" onclick="focusMain(); return false;">Skip to content</a>
     <header class="header">
       <button type="button" class="menu-toggle" id="menuToggle" aria-label="Menu" aria-controls="mainmenu"
         aria-expanded="false" onclick="toggleDrawer()">
         <svg class="icon" aria-hidden="true"><use href="#i-menu" /></svg>
       </button>
       <div class="header-main">
-        <img src="favicon.ico" alt="ico" class="brand-logo" />
+        <img src="icon-android-chrome-192x192.png" alt="" class="brand-logo" />
         <div class="brand-text">
           <h1 class="brand-font">AI-on-the-Edge Device</h1>
           <div class="device-name">
@@ -410,6 +446,8 @@
         document.cookie = `page=${page};path=/;SameSite=Lax`;
       }
       UI.main.src = page;
+      markCurrentPage(page);
+      trackHeaderHeight();
 
       loadHostname();
       loadConfig().then(homeAssistantSendDiscoveryVisibility).catch((e) => console.error('Failed to load config', e));

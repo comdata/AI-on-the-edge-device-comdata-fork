@@ -84,7 +84,9 @@ function renderRssi(value, outputElement) {
     setBars(0, '0.1');
   } else {
     const label = value >= -55 ? 'Excellent' : value >= -67 ? 'Good' : value >= -78 ? 'Fair' : value >= -85 ? 'Weak' : 'Unreliable';
-    output.textContent = `${label} (${value}dBm)`;
+    // Two nodes, so the language layer can translate the quality word on its own
+    output.textContent = '';
+    output.append(label, ` (${value}dBm)`);
     const RSSI_THRESHOLDS = [-85, -78, -67, -55]; // Weak, Fair, Good, Excellent
     setBars(RSSI_THRESHOLDS.filter((t) => value >= t).length, '0.2');
   }
@@ -669,13 +671,27 @@ function i18nStart() {
   }).observe(document.body, { childList: true, subtree: true, characterData: true });
 }
 
+// The shell's frame holds the focus; mark the content so the ring shows inside it
+(function frameFocusRing() {
+  if (window.parent === window) return;
+
+  const sync = () => document.body.classList.toggle('has-frame-focus', document.hasFocus() && document.activeElement === document.body);
+
+  window.addEventListener('focus', sync);
+  window.addEventListener('blur', sync);
+  document.addEventListener('focusin', sync);
+  document.addEventListener('focusout', () => setTimeout(sync, 0));
+})();
+
 (function i18nInit() {
   const lang = getLanguage();
   document.documentElement.lang = lang;
   if (lang === 'en') return;
 
+  // Carry global.js's cache-busting version over, otherwise a cached dictionary never updates
+  const version = new URL(document.currentScript?.src || location.href, location.href).searchParams.get('v');
   const script = document.createElement('script');
-  script.src = I18N_SOURCES[lang];
+  script.src = version ? `${I18N_SOURCES[lang]}?v=${version}` : I18N_SOURCES[lang];
   script.onload = () => {
     if (document.body) i18nStart();
     else document.addEventListener('DOMContentLoaded', i18nStart);

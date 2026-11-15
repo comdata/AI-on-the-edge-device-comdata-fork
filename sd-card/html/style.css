@@ -148,7 +148,7 @@ body {
   grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
   width: 100%;
-  max-width: 1024px;
+  max-width: 1440px;
   margin: 0 auto;
   position: relative;
 }
@@ -239,6 +239,20 @@ iframe.iframe.ready {
   background: rgba(255, 255, 255, 0.06);
 }
 
+/* Page that is currently shown in the iframe */
+.menu li>a[aria-current='page'] {
+  color: var(--nav-accent);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 3px 0 0 var(--nav-accent);
+}
+
+.menu li ul a[aria-current='page'] {
+  color: var(--text-on-dark);
+  font-weight: bold;
+  box-shadow: none;
+  background: rgba(255, 255, 255, 0.1);
+}
+
 /* Submenu Base Logic: expanded inline below its parent */
 .menu li ul {
   display: none;
@@ -255,7 +269,7 @@ iframe.iframe.ready {
 /* Submenu Links */
 .menu li ul a {
   color: #cbd5e1;
-  min-height: 40px;
+  min-height: 44px;
   padding: 6px 15px 6px 45px;
   font-weight: normal;
 }
@@ -295,12 +309,49 @@ iframe.iframe.ready {
   overflow: hidden;
 }
 
+/* Skip link: first stop for keyboard users, hidden until focused */
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: -60px;
+  z-index: 200;
+  background: var(--bg);
+  color: var(--text-main);
+  border: 1px solid var(--border);
+  border-radius: var(--input-radius);
+  padding: 10px 14px;
+  text-decoration: none;
+  transition: top var(--transition-speed);
+}
+
+.skip-link:focus {
+  top: 8px;
+}
+
+/* The frame is one tab stop; the ring sits inside the content area */
+.iframe:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+/* Keyboard focus, visible on every control; the dark chrome gets a light ring */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.header :focus-visible,
+.menu :focus-visible,
+.skip-link:focus-visible {
+  outline-color: #93c5fd;
+}
+
 .menu-toggle {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   margin-right: 4px;
   flex-shrink: 0;
@@ -342,14 +393,16 @@ iframe.iframe.ready {
   font-size: inherit;
   background: var(--surface);
   border: 1px solid var(--border);
-  width: 160px;
+  /* Content decides the width: translated labels are longer than the English ones */
+  width: auto;
+  min-width: 160px;
   text-align: center;
   justify-content: center;
   align-items: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 5px 5px;
+  padding: 6px 14px;
   border-radius: 4px;
   cursor: pointer;
   transition:
@@ -397,7 +450,10 @@ iframe.iframe.ready {
 .theme-switch {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   margin-left: auto;
+  min-width: 48px;
+  min-height: 44px;
   cursor: pointer;
   user-select: none;
 }
@@ -407,14 +463,21 @@ iframe.iframe.ready {
 }
 
 /* Language selection, sits next to the theme switch */
+.lang-select {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
 .lang-select select {
   background: rgba(255, 255, 255, 0.15);
   color: var(--text-on-dark);
   border: 0;
   border-radius: 999px;
-  padding: 3px 6px;
+  padding: 0 12px;
+  min-height: 32px;
   font: inherit;
-  font-size: 0.85em;
+  font-size: 0.9em;
   cursor: pointer;
 }
 
@@ -522,12 +585,20 @@ iframe.iframe.ready {
     left: 0;
     width: min(300px, 86vw);
     transform: translateX(-100%);
-    transition: transform var(--transition-speed) ease-in-out;
+    /* Hidden when closed: out of the tab order and out of the layout */
+    visibility: hidden;
+    transition:
+      transform var(--transition-speed) ease-in-out,
+      visibility 0s linear var(--transition-speed);
     box-shadow: 2px 0 12px rgba(0, 0, 0, 0.25);
   }
 
   .main.menu-open .menu {
     transform: none;
+    visibility: visible;
+    transition:
+      transform var(--transition-speed) ease-in-out,
+      visibility 0s;
   }
 
   .menu-backdrop {
@@ -548,6 +619,11 @@ iframe.iframe.ready {
   .header {
     padding: 8px 12px;
     gap: 8px;
+  }
+
+  /* Touch devices need a 44px control, not only a 44px hit area around it */
+  .lang-select select {
+    min-height: 44px;
   }
 }
 
@@ -578,6 +654,14 @@ iframe.iframe.ready {
   .device-name {
     font-size: 0.95rem;
     color: var(--text-on-dark);
+    min-width: 0;
+  }
+
+  /* The name yields first, so the controls never leave the screen on narrow phones */
+  .device-name #device-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .menu li a {
