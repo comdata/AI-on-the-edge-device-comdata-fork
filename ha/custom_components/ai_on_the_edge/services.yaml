@@ -1,0 +1,34 @@
+set_config:
+  fields:
+    entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: ai_on_the_edge
+    config:
+      required: true
+      example: '{"operationmode": {"automaticprocessinterval": "2.00"}}'
+      selector:
+        object:
+
+set_fallback_value:
+  fields:
+    entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: ai_on_the_edge
+    sequence:
+      required: false
+      default: main
+      example: main
+      selector:
+        text:
+    value:
+      required: true
+      example: -1
+      selector:
+        number:
+          mode: box
+          step: 0.00001
+          min: -1

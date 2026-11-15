@@ -8,6 +8,10 @@
 #   homeassistant:
 #     packages:
 #       ai_on_the_edge: !include ha/ai_on_the_edge_package.yaml
+#
+# Only needed without the custom integration: it offers the same actions as
+# ai_on_the_edge.set_config (merged, applied with ?reload=true) and
+# ai_on_the_edge.set_fallback_value, plus a button for /cycle_start and /reboot.
 
 rest_command:
   aioe_trigger_cycle:

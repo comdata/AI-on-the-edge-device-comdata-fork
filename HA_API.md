@@ -59,8 +59,19 @@ password: <device password>
 
 ## Controlling the configuration from Home Assistant
 
-The device stays the server for its configuration, so Home Assistant uses
-`rest_command` entries (see `ha/ai_on_the_edge_package.yaml`):
+The device stays the server for its configuration. With the custom integration
+(`ha/custom_components/ai_on_the_edge/`) use its services:
+
+```yaml
+service: ai_on_the_edge.set_config
+data:
+  config: '{"operationmode": {"automaticprocessinterval": "2.00"}}'
+```
+
+`set_config` merges a partial config into the stored one and posts the result with
+`?reload=true`, so no reboot is needed. `ai_on_the_edge.set_fallback_value` overrides
+a reading (`-1` clears it). Without the integration, the `rest_command` entries in
+`ha/ai_on_the_edge_package.yaml` do the same thing:
 
 ```yaml
 service: rest_command.aioe_trigger_cycle
