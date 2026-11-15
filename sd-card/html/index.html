@@ -218,6 +218,12 @@
           </div>
         </div>
       </div>
+      <label class="lang-select">
+        <select id="langSelect" aria-label="Language" onchange="setLanguage(this.value)">
+          <option value="en">English</option>
+          <option value="de">Deutsch</option>
+        </select>
+      </label>
       <label class="theme-switch">
         <input type="checkbox" id="themeToggle" onchange="setTheme(this.checked)" />
         <span class="track">

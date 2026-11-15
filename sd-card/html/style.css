@@ -406,6 +406,22 @@ iframe.iframe.ready {
   display: none;
 }
 
+/* Language selection, sits next to the theme switch */
+.lang-select select {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-on-dark);
+  border: 0;
+  border-radius: 999px;
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.lang-select select option {
+  color: #000;
+}
+
 .theme-switch .track {
   width: 44px;
   height: 24px;

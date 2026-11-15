@@ -605,3 +605,85 @@ function loadImage(url, altUrl) {
   timer = setTimeout(fallback, 15000);
   return img;
 }
+
+/* ========================================================================== */
+/* UI language                                                                */
+/* ========================================================================== */
+
+/* English is the source language: the HTML keeps English texts and this file
+ * swaps them for the language chosen in the menu. Texts without a translation
+ * stay English, so a new page never breaks by a missing entry.
+ * Storage mirrors the theme switch (localStorage + cookie).
+ */
+const I18N_SOURCES = { de: 'i18n.de.js' };
+const I18N_ATTRS = ['title', 'placeholder', 'alt', 'aria-label'];
+const I18N_SKIP = ['SCRIPT', 'STYLE', 'CODE', 'PRE', 'TEXTAREA'];
+const i18nKnown = (lang) => lang === 'en' || !!I18N_SOURCES[lang];
+
+function getLanguage() {
+  let lang;
+  try { lang = localStorage.getItem('lang'); } catch (e) { }
+  if (!i18nKnown(lang)) {
+    try { lang = document.cookie.match(/(?:^|; )lang=([a-z]{2})/)?.[1]; } catch (e) { }
+  }
+  return i18nKnown(lang) ? lang : 'en';
+}
+
+function setLanguage(lang) {
+  try { localStorage.setItem('lang', lang); } catch (e) { }
+  document.cookie = `lang=${lang};path=/;max-age=${60 * 60 * 24 * 400};SameSite=Lax`;
+  location.reload();
+}
+
+const i18nKey = (text) => text.replace(/\s+/g, ' ').trim();
+const i18nLookup = (text) => window.I18N_DICT && window.I18N_DICT[i18nKey(text)];
+
+function i18nTextNode(node) {
+  const translation = i18nLookup(node.nodeValue);
+  if (!translation) return;
+  const lead = node.nodeValue.match(/^\s*/)[0];
+  const trail = node.nodeValue.match(/\s*$/)[0];
+  node.nodeValue = lead + translation + trail;
+}
+
+function i18nApply(root) {
+  if (!root) return;
+  if (root.nodeType === Node.TEXT_NODE) return i18nTextNode(root);
+  if (root.nodeType !== Node.ELEMENT_NODE) return;
+  if (I18N_SKIP.includes(root.tagName) || root.classList.contains('no-i18n')) return;
+  for (const attr of I18N_ATTRS) {
+    const value = root.getAttribute(attr);
+    if (value && i18nLookup(value)) root.setAttribute(attr, i18nLookup(value));
+  }
+  for (const child of root.childNodes) i18nApply(child);
+}
+
+function i18nStart() {
+  if (document.title) document.title = i18nLookup(document.title) || document.title;
+  i18nApply(document.body);
+  new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      if (m.type === 'characterData') i18nTextNode(m.target);
+      else for (const node of m.addedNodes) i18nApply(node);
+    }
+  }).observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+
+(function i18nInit() {
+  const lang = getLanguage();
+  document.documentElement.lang = lang;
+  if (lang === 'en') return;
+
+  const script = document.createElement('script');
+  script.src = I18N_SOURCES[lang];
+  script.onload = () => {
+    if (document.body) i18nStart();
+    else document.addEventListener('DOMContentLoaded', i18nStart);
+  };
+  document.head.appendChild(script);
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const select = document.getElementById('langSelect');
+    if (select) select.value = lang;
+  });
+})();
