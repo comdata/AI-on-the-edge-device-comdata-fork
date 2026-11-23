@@ -1,5 +1,20 @@
 # Changelog
 
+## [18.2.0-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.1.0-comdataFork...v18.2.0-comdataFork) (2026-11-15)
+
+
+### Features
+
+* **ha:** custom integration ai_on_the_edge (polling REST API, one device) ([c370496](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/c3704964cf0a7450bacc5d3812d3ac1282006dc4))
+* **ha:** vollwertige Integration (Optionen, Reauth, Aktionen, Problem-Sensor) ([df94a8d](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/df94a8df136091b35d4811c2da6f0a6c002ee8a1))
+* publish values to the Home Assistant API ([fb5dfc9](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/fb5dfc96ca103deb4e747ea087fcf97963443c44))
+
+
+### Bug Fixes
+
+* **ha:** services.yaml validieren (Number-Selector step &gt;= 0.001, Feldnamen) ([038d805](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/038d805758291ca6a1f4b99ac43dd28cdd103046))
+* **homeassistant:** require cjson instead of json (ESP-IDF component name) ([ffdc2f8](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/ffdc2f8f3c585c1861c3939dce0264a4307e2a15))
+
 ## [18.1.0-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.0.1-comdataFork...v18.1.0-comdataFork) (2026-11-15)
 
 
