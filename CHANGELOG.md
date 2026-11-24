@@ -1,5 +1,12 @@
 # Changelog
 
+## [18.3.1-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.3.0-comdataFork...v18.3.1-comdataFork) (2026-11-24)
+
+
+### Bug Fixes
+
+* **webui:** raise the URI handler limit above the registered route count ([#8](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/issues/8)) ([bea6452](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/bea6452e948c28c24381921c3694850e9ed19384))
+
 ## [18.3.0-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.2.0-comdataFork...v18.3.0-comdataFork) (2026-11-24)
 
 
