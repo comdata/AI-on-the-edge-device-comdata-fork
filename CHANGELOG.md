@@ -1,5 +1,12 @@
 # Changelog
 
+## [18.3.3-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.3.2-comdataFork...v18.3.3-comdataFork) (2026-11-24)
+
+
+### Bug Fixes
+
+* **ota:** size the request buffer for GitHub's signed asset URL ([#12](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/issues/12)) ([b00ac8f](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/b00ac8f6985ff1280bb76272c554074bd3cc7041))
+
 ## [18.3.2-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.3.1-comdataFork...v18.3.2-comdataFork) (2026-11-24)
 
 
