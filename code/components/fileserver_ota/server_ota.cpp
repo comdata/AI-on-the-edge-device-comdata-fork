@@ -1116,13 +1116,13 @@ void registerOtaRebootUri(httpd_handle_t server)
 
     camuri.method = HTTP_POST;
     camuri.uri = "/ota/*";
-    camuri.handler = HTTP_AUTH(handler_ota);
+    camuri.handler = HTTP_AUTH_BASIC(handler_ota);
     camuri.user_ctx = httpServerData;
     httpd_register_uri_handler(server, &camuri);
 
     camuri.method = HTTP_GET;
     camuri.uri = "/reboot";
-    camuri.handler = HTTP_AUTH(handler_reboot);
+    camuri.handler = HTTP_AUTH_BASIC(handler_reboot);
     camuri.user_ctx = NULL;
     httpd_register_uri_handler(server, &camuri);
 }
