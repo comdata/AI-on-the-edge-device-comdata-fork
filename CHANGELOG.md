@@ -1,5 +1,17 @@
 # Changelog
 
+## [18.3.0-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.2.0-comdataFork...v18.3.0-comdataFork) (2026-11-24)
+
+
+### Features
+
+* **ota:** pull firmware updates from the comdata GitHub releases ([#7](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/issues/7)) ([3c30022](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/3c300229e5c302bb1cd4f487a8e490ccc3291121))
+
+
+### Other Changes
+
+* **deps:** dependabot covers the Python tooling as well ([4337f03](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/4337f03d548f49d4a0fdecda095a066d9b316add))
+
 ## [18.2.0-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.1.0-comdataFork...v18.2.0-comdataFork) (2026-11-15)
 
 
