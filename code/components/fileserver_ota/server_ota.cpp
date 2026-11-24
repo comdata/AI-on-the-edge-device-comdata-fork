@@ -600,6 +600,7 @@ static constexpr size_t OTA_RELEASE_METADATA_MAX_SIZE = 128 * 1024;
 
 static char otaPullStatus[160] = "idle";
 static bool otaPullActive = false;
+static std::string otaPullError; // last download failure reason, shown in the WebUI
 
 
 static void setOtaPullStatus(const std::string &status)
@@ -724,6 +725,29 @@ static bool otaIsNewerVersion(const std::string &candidate, const std::string &i
 }
 
 
+// Opens the package URL and follows redirects.
+// Note: esp_http_client only follows redirects in perform(); with open()/read() the caller has to do it.
+static bool otaHttpOpenPackage(esp_http_client_handle_t httpClient, int &httpStatusCode, int64_t &contentLength)
+{
+    for (int redirect = 0; redirect < 5; ++redirect) {
+        if (esp_http_client_open(httpClient, 0) != ESP_OK) {
+            return false;
+        }
+        contentLength = esp_http_client_fetch_headers(httpClient);
+        httpStatusCode = esp_http_client_get_status_code(httpClient);
+
+        if (httpStatusCode != 301 && httpStatusCode != 302 && httpStatusCode != 303 && httpStatusCode != 307 && httpStatusCode != 308) {
+            return true;
+        }
+        if (esp_http_client_set_redirection(httpClient) != ESP_OK) {
+            return false;
+        }
+        esp_http_client_close(httpClient); // the redirect target is opened with the next loop iteration
+    }
+    return false;
+}
+
+
 // Streams the release package into the OTA staging directory
 static bool otaDownloadPackage(const std::string &url)
 {
@@ -747,24 +771,27 @@ static bool otaDownloadPackage(const std::string &url)
     bool success = false;
     FILE *file = NULL;
     char *buffer = (char *)malloc(SERVER_OTA_SCRATCH_BUFSIZE);
+    int httpStatusCode = 0;
+    int64_t contentLength = 0;
 
     if (buffer == NULL) {
         LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: Failed to allocate buffer");
     }
-    else if (esp_http_client_open(httpClient, 0) != ESP_OK) {
+    else if (!otaHttpOpenPackage(httpClient, httpStatusCode, contentLength)) {
         LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: Failed to connect | URL: " + url);
+        otaPullError = "connection failed";
     }
     else {
-        const int64_t contentLength = esp_http_client_fetch_headers(httpClient);
-        const int httpStatusCode = esp_http_client_get_status_code(httpClient);
         LogFile.writeToFile(ESP_LOG_INFO, TAG,
                             "OTA download: HTTP " + std::to_string(httpStatusCode) + " | Size: " + std::to_string(contentLength));
 
         if (httpStatusCode != 200) {
-            LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: HTTP request failed");
+            LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: HTTP request failed | Status: " + std::to_string(httpStatusCode));
+            otaPullError = "HTTP " + std::to_string(httpStatusCode);
         }
         else if (contentLength <= 0 || contentLength > MAX_FILE_SIZE) {
             LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: Invalid package size");
+            otaPullError = "invalid package size";
         }
         else {
             file = fopen(FILE_OTA_STAGED_PACKAGE, "wb");
@@ -777,11 +804,15 @@ static bool otaDownloadPackage(const std::string &url)
                 while ((read = esp_http_client_read(httpClient, buffer, SERVER_OTA_SCRATCH_BUFSIZE)) > 0) {
                     if (fwrite(buffer, 1, read, file) != (size_t)read) {
                         LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: SD card write failed");
+                        otaPullError = "SD card write failed";
                         break;
                     }
                     total += read;
                 }
                 success = (read == 0 && total == (size_t)contentLength);
+                if (!success) {
+                    otaPullError = "incomplete download";
+                }
                 LogFile.writeToFile(success ? ESP_LOG_INFO : ESP_LOG_ERROR, TAG,
                                     "OTA download: " + std::to_string(total) + " of " + std::to_string(contentLength) + " byte written");
             }
@@ -804,6 +835,7 @@ static bool otaDownloadPackage(const std::string &url)
 
     if (detectPackageType(FILE_OTA_STAGED_PACKAGE) != "ZIP") {
         LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: Package is not a valid ZIP file");
+        otaPullError = "package is not a ZIP";
         deleteAllFilesInDirectory(DIR_OTA_STAGED, true);
         return false;
     }
@@ -820,8 +852,9 @@ static void taskOtaPull(void *pvParameter)
 
     setStatusLed(AP_OR_OTA, 1, true);
 
+    otaPullError.clear();
     if (!otaDownloadPackage(url)) {
-        setOtaPullStatus("failed: download failed, see device log");
+        setOtaPullStatus("failed: " + (otaPullError.empty() ? std::string("download failed, see device log") : otaPullError));
         otaPullActive = false;
         vTaskDelete(NULL);
         return;
@@ -865,6 +898,7 @@ static void taskOtaAutoUpdate(void *pvParameter)
         }
         else {
             LogFile.writeToFile(ESP_LOG_INFO, TAG, "Auto update: Installing " + tag + " (installed: " + installedVersion + ")");
+            otaPullError.clear();
             setOtaPullStatus("running: auto update " + tag);
             otaPullActive = true;
 
@@ -874,7 +908,7 @@ static void taskOtaAutoUpdate(void *pvParameter)
                 vTaskDelete(NULL);
             }
 
-            setOtaPullStatus("failed: download failed, see device log");
+            setOtaPullStatus("failed: " + (otaPullError.empty() ? std::string("download failed, see device log") : otaPullError));
             otaPullActive = false;
         }
 
