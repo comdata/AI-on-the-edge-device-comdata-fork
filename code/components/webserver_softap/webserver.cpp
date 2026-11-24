@@ -734,6 +734,7 @@ void registerWebserverUri(httpd_handle_t server, const char *basePath)
 
     camuri.uri = "/logout";
     camuri.handler = handleLogoutGet;
+    camuri.method = HTTP_GET;
     camuri.user_ctx = httpServerData;
     httpd_register_uri_handler(server, &camuri);
 
