@@ -1,7 +1,11 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+# Dependabot version updates.
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Not covered here, because Dependabot has no ecosystem for it:
+#   - platformio.ini (platform and library pins)
+#   - code/components/*/idf_component.yml (ESP-IDF managed components)
+#   - the Home Assistant integration (empty `requirements` list)
+# Those stay manual.
 
 version: 2
 updates:
@@ -9,5 +13,26 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    pull-request-branch-name:
+      separator: "-"
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 5
+    groups:
+      python-tooling:
+        patterns:
+          - "*"
     pull-request-branch-name:
       separator: "-"

@@ -1,0 +1,7 @@
+# Python tooling installed by the build workflows (.github/workflows/).
+# Pinned so Dependabot can keep it current.
+markdown==3.11.3
+esp_idf_size==2.3.2
+
+# PlatformIO is deliberately not pinned: the build tracks the latest core
+# (`pip install --upgrade platformio` in the workflows).
