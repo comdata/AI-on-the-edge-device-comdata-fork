@@ -1,5 +1,12 @@
 # Changelog
 
+## [18.3.2-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.3.1-comdataFork...v18.3.2-comdataFork) (2026-11-24)
+
+
+### Bug Fixes
+
+* **ota:** log every download hop and the connect error code ([#10](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/issues/10)) ([66908e3](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/66908e3576d7782ee98395e590cbda1a0e0bf13a))
+
 ## [18.3.1-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.3.0-comdataFork...v18.3.1-comdataFork) (2026-11-24)
 
 
