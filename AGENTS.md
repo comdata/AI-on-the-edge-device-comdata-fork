@@ -62,6 +62,32 @@ git fetch upstream && git merge upstream/develop
 Merge it often (it is the only source of shared fixes) and resolve conflicts in
 favour of this fork's v18 + comdata changes.
 
+## OTA from the fork's GitHub releases (device pulls itself)
+
+Since the `feat(ota)` change the device can update itself; the release ZIP no
+longer has to travel through a browser.
+
+* `POST /ota/pull?url=<asset-url>` (auth like every endpoint) downloads a
+  release ZIP on the device: HTTPS with the certificate bundle, streamed into
+  `/.ota_staged/ota_package`, then the normal reboot → unzip → flash path.
+  Only URLs starting with
+  `https://github.com/comdata/AI-on-the-edge-device-comdata-fork/releases/download/`
+  are accepted (the handler is not a general URL fetcher).
+* `GET /ota/pull` answers `idle`, `running`, `done` or `failed: …`; the WebUI
+  page (`sd-card/html/sys_ota.html`) polls it while the device works.
+* The page resolves the release itself via
+  `https://api.github.com/repos/comdata/AI-on-the-edge-device-comdata-fork/releases/latest`
+  from the browser (repo is public, no token) and picks the asset named
+  `AI-on-the-edge-device__<board type lowercase>__comdataFork_*.zip`; the board
+  names in the asset match `BOARD_TYPE_NAME` lowercased.
+* Auto update: `startOtaAutoUpdate()` (called from `app_main` after the
+  webserver starts) checks 60 s after boot and then every 6 h. It installs a
+  newer release **only when the running firmware is a release tag (`v…`)** –
+  an Actions artifact build (`feat/…-<hash>`) is never replaced automatically,
+  because its version cannot be compared with a tag.
+* Rotation: the download task needs ~12 KB stack (TLS) and runs beside the
+  httpd task, so the OTA handlers stay short and only trigger tasks.
+
 ## Release and OTA deployment
 
 Releases come from `develop`: merge the release PR from
