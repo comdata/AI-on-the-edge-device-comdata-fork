@@ -1,6 +1,6 @@
 {
   "name": "AI-on-the-Edge Device",
-  "version": "v18.3.1-comdataFork",
+  "version": "v18.3.2-comdataFork",
   "new_install_prompt_erase": false,
   "builds": [
     {
