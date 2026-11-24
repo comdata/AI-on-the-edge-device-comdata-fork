@@ -2,6 +2,9 @@
 #include "../../include/defines.h"
 
 #include <string>
+#include <cstdio>
+#include <cstdlib>
+#include <cctype>
 
 #include <freertos/task.h>
 
@@ -12,7 +15,12 @@
 #include <esp_log.h>
 #include <esp_partition.h>
 #include <esp_app_format.h>
+#include <esp_http_client.h>
+#include <esp_crt_bundle.h>
+#include <cJSON.h>
 #include "miniz.h"
+
+#include "../main/version.h"
 
 #ifdef ENABLE_MQTT
 #include "interface_mqtt.h"
@@ -579,6 +587,360 @@ void checkOtaUpdate()
 }
 
 
+// --------------------------------------------------------------------------------
+// OTA update from GitHub releases (comdata fork)
+// --------------------------------------------------------------------------------
+static constexpr const char *OTA_RELEASE_API_URL = "https://api.github.com/repos/comdata/AI-on-the-edge-device-comdata-fork/releases/latest";
+static constexpr const char *OTA_RELEASE_DOWNLOAD_PREFIX =
+    "https://github.com/comdata/AI-on-the-edge-device-comdata-fork/releases/download/";
+static constexpr const char *OTA_RELEASE_ASSET_PREFIX = "AI-on-the-edge-device__";
+static constexpr int OTA_AUTO_UPDATE_DELAY_MS = 60000;               // initial delay after boot
+static constexpr int OTA_AUTO_UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000; // re-check every 6h
+static constexpr size_t OTA_RELEASE_METADATA_MAX_SIZE = 128 * 1024;
+
+static char otaPullStatus[160] = "idle";
+static bool otaPullActive = false;
+
+
+static void setOtaPullStatus(const std::string &status)
+{
+    snprintf(otaPullStatus, sizeof(otaPullStatus), "%s", status.c_str());
+}
+
+
+// Reads the whole HTTP(S) response body into a string (used for the small GitHub release JSON)
+static bool otaHttpGetToString(const char *url, const char *accept, std::string &response)
+{
+    esp_http_client_config_t httpConfig = {};
+    httpConfig.url = url;
+    httpConfig.crt_bundle_attach = esp_crt_bundle_attach;
+    httpConfig.user_agent = "AI-on-the-Edge Device";
+    httpConfig.timeout_ms = 15000;
+
+    esp_http_client_handle_t httpClient = esp_http_client_init(&httpConfig);
+    if (httpClient == NULL) {
+        return false;
+    }
+    esp_http_client_set_header(httpClient, "Accept", accept);
+
+    bool success = false;
+    if (esp_http_client_open(httpClient, 0) == ESP_OK) {
+        esp_http_client_fetch_headers(httpClient);
+
+        response.clear();
+        char buffer[512];
+        int read = 0;
+        while ((read = esp_http_client_read(httpClient, buffer, sizeof(buffer))) > 0) {
+            response.append(buffer, read);
+            if (response.size() > OTA_RELEASE_METADATA_MAX_SIZE) {
+                read = -1; // response too large, abort
+                break;
+            }
+        }
+        success = esp_http_client_get_status_code(httpClient) == 200 && read == 0 && !response.empty();
+    }
+
+    esp_http_client_close(httpClient);
+    esp_http_client_cleanup(httpClient);
+
+    return success;
+}
+
+
+// Resolves tag and download URL of the latest release asset matching the board type
+static bool otaGetLatestRelease(const std::string &boardType, std::string &tag, std::string &assetUrl, size_t &assetSize)
+{
+    std::string response;
+    if (!otaHttpGetToString(OTA_RELEASE_API_URL, "application/vnd.github+json", response)) {
+        LogFile.writeToFile(ESP_LOG_WARN, TAG, "Failed to read release information from GitHub");
+        return false;
+    }
+
+    cJSON *jsonRoot = cJSON_Parse(response.c_str());
+    if (jsonRoot == NULL) {
+        LogFile.writeToFile(ESP_LOG_WARN, TAG, "Failed to parse release information from GitHub");
+        return false;
+    }
+
+    bool found = false;
+    const cJSON *jsonTag = cJSON_GetObjectItemCaseSensitive(jsonRoot, "tag_name");
+    const cJSON *jsonAssets = cJSON_GetObjectItemCaseSensitive(jsonRoot, "assets");
+    if (cJSON_IsString(jsonTag) && cJSON_IsArray(jsonAssets)) {
+        const std::string expectedPrefix = std::string(OTA_RELEASE_ASSET_PREFIX) + boardType + "__comdataFork_";
+        const cJSON *jsonAsset = NULL;
+
+        cJSON_ArrayForEach(jsonAsset, jsonAssets) {
+            const cJSON *jsonName = cJSON_GetObjectItemCaseSensitive(jsonAsset, "name");
+            const cJSON *jsonUrl = cJSON_GetObjectItemCaseSensitive(jsonAsset, "browser_download_url");
+            const cJSON *jsonSize = cJSON_GetObjectItemCaseSensitive(jsonAsset, "size");
+
+            if (!cJSON_IsString(jsonName) || !cJSON_IsString(jsonUrl)) {
+                continue;
+            }
+            const std::string assetName = jsonName->valuestring;
+            if (assetName.rfind(expectedPrefix, 0) == 0 && assetName.size() > 4 &&
+                assetName.compare(assetName.size() - 4, 4, ".zip") == 0) {
+                tag = jsonTag->valuestring;
+                assetUrl = jsonUrl->valuestring;
+                assetSize = cJSON_IsNumber(jsonSize) ? (size_t)jsonSize->valuedouble : 0;
+                found = true;
+                break;
+            }
+        }
+    }
+
+    cJSON_Delete(jsonRoot);
+    return found;
+}
+
+
+// Version check for release tags like "v18.2.0-comdataFork"
+static bool otaIsReleaseVersion(const std::string &version)
+{
+    return version.size() > 1 && version[0] == 'v' && isdigit((unsigned char)version[1]) != 0;
+}
+
+
+static void otaParseVersion(const std::string &version, int part[3])
+{
+    part[0] = part[1] = part[2] = 0;
+    sscanf(version.c_str(), "v%d.%d.%d", &part[0], &part[1], &part[2]);
+}
+
+
+static bool otaIsNewerVersion(const std::string &candidate, const std::string &installed)
+{
+    int candidatePart[3];
+    int installedPart[3];
+    otaParseVersion(candidate, candidatePart);
+    otaParseVersion(installed, installedPart);
+
+    for (int i = 0; i < 3; ++i) {
+        if (candidatePart[i] != installedPart[i]) {
+            return candidatePart[i] > installedPart[i];
+        }
+    }
+    return false;
+}
+
+
+// Streams the release package into the OTA staging directory
+static bool otaDownloadPackage(const std::string &url)
+{
+    makeDir(DIR_OTA_STAGED);
+    deleteAllFilesInDirectory(DIR_OTA_STAGED, true);
+
+    esp_http_client_config_t httpConfig = {};
+    httpConfig.url = url.c_str();
+    httpConfig.crt_bundle_attach = esp_crt_bundle_attach;
+    httpConfig.user_agent = "AI-on-the-Edge Device";
+    httpConfig.timeout_ms = 20000;
+    httpConfig.buffer_size = SERVER_OTA_SCRATCH_BUFSIZE;
+
+    esp_http_client_handle_t httpClient = esp_http_client_init(&httpConfig);
+    if (httpClient == NULL) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: Failed to init HTTP client");
+        return false;
+    }
+    esp_http_client_set_header(httpClient, "Accept", "application/octet-stream");
+
+    bool success = false;
+    FILE *file = NULL;
+    char *buffer = (char *)malloc(SERVER_OTA_SCRATCH_BUFSIZE);
+
+    if (buffer == NULL) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: Failed to allocate buffer");
+    }
+    else if (esp_http_client_open(httpClient, 0) != ESP_OK) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: Failed to connect | URL: " + url);
+    }
+    else {
+        const int64_t contentLength = esp_http_client_fetch_headers(httpClient);
+        const int httpStatusCode = esp_http_client_get_status_code(httpClient);
+        LogFile.writeToFile(ESP_LOG_INFO, TAG,
+                            "OTA download: HTTP " + std::to_string(httpStatusCode) + " | Size: " + std::to_string(contentLength));
+
+        if (httpStatusCode != 200) {
+            LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: HTTP request failed");
+        }
+        else if (contentLength <= 0 || contentLength > MAX_FILE_SIZE) {
+            LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: Invalid package size");
+        }
+        else {
+            file = fopen(FILE_OTA_STAGED_PACKAGE, "wb");
+            if (file == NULL) {
+                LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: Failed to open staging file");
+            }
+            else {
+                size_t total = 0;
+                int read = 0;
+                while ((read = esp_http_client_read(httpClient, buffer, SERVER_OTA_SCRATCH_BUFSIZE)) > 0) {
+                    if (fwrite(buffer, 1, read, file) != (size_t)read) {
+                        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: SD card write failed");
+                        break;
+                    }
+                    total += read;
+                }
+                success = (read == 0 && total == (size_t)contentLength);
+                LogFile.writeToFile(success ? ESP_LOG_INFO : ESP_LOG_ERROR, TAG,
+                                    "OTA download: " + std::to_string(total) + " of " + std::to_string(contentLength) + " byte written");
+            }
+        }
+    }
+
+    if (file) {
+        fclose(file);
+    }
+    if (buffer) {
+        free(buffer);
+    }
+    esp_http_client_close(httpClient);
+    esp_http_client_cleanup(httpClient);
+
+    if (!success) {
+        deleteAllFilesInDirectory(DIR_OTA_STAGED, true);
+        return false;
+    }
+
+    if (detectPackageType(FILE_OTA_STAGED_PACKAGE) != "ZIP") {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: Package is not a valid ZIP file");
+        deleteAllFilesInDirectory(DIR_OTA_STAGED, true);
+        return false;
+    }
+
+    return true;
+}
+
+
+// Downloads a release package in the background and reboots into the OTA process
+static void taskOtaPull(void *pvParameter)
+{
+    std::string url = *(std::string *)pvParameter;
+    delete (std::string *)pvParameter;
+
+    setStatusLed(AP_OR_OTA, 1, true);
+
+    if (!otaDownloadPackage(url)) {
+        setOtaPullStatus("failed: download failed, see device log");
+        otaPullActive = false;
+        vTaskDelete(NULL);
+        return;
+    }
+
+    setOtaPullStatus("done");
+    LogFile.writeToFile(ESP_LOG_INFO, TAG, "OTA package downloaded, rebooting to install");
+    vTaskDelay(pdMS_TO_TICKS(500));
+    doReboot();
+    vTaskDelete(NULL);
+}
+
+
+// Periodic check: install a newer release automatically when the device runs a release build
+static void taskOtaAutoUpdate(void *pvParameter)
+{
+    vTaskDelay(pdMS_TO_TICKS(OTA_AUTO_UPDATE_DELAY_MS));
+
+    for (;;) {
+        const std::string boardType = toLower(getBoardType());
+        const std::string installedVersion = getFwVersion();
+        std::string tag;
+        std::string assetUrl;
+        size_t assetSize = 0;
+
+        if (!otaGetLatestRelease(boardType, tag, assetUrl, assetSize)) {
+            LogFile.writeToFile(ESP_LOG_WARN, TAG, "Auto update: No matching release asset for board " + boardType);
+        }
+        else if (!otaIsReleaseVersion(installedVersion)) {
+            LogFile.writeToFile(ESP_LOG_INFO, TAG,
+                                "Auto update: Latest release is " + tag + " | Installed build is no release version, skipped");
+        }
+        else if (!otaIsNewerVersion(tag, installedVersion)) {
+            LogFile.writeToFile(ESP_LOG_INFO, TAG, "Auto update: Installed version is up to date (" + tag + ")");
+        }
+        else if (otaPullActive) {
+            LogFile.writeToFile(ESP_LOG_INFO, TAG, "Auto update: Another download is running, skipped");
+        }
+        else if (assetSize > MAX_FILE_SIZE) {
+            LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Auto update: Release package exceeds maximum file size");
+        }
+        else {
+            LogFile.writeToFile(ESP_LOG_INFO, TAG, "Auto update: Installing " + tag + " (installed: " + installedVersion + ")");
+            setOtaPullStatus("running: auto update " + tag);
+            otaPullActive = true;
+
+            if (otaDownloadPackage(assetUrl)) {
+                setOtaPullStatus("done");
+                doReboot();
+                vTaskDelete(NULL);
+            }
+
+            setOtaPullStatus("failed: download failed, see device log");
+            otaPullActive = false;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(OTA_AUTO_UPDATE_INTERVAL_MS));
+    }
+}
+
+
+void startOtaAutoUpdate(void)
+{
+    if (xTaskCreate(&taskOtaAutoUpdate, "taskOTAAutoUpdate", 12288, NULL, tskIDLE_PRIORITY + 2, NULL) != pdPASS) {
+        LogFile.writeToFile(ESP_LOG_WARN, TAG, "Auto update: Failed to create task");
+    }
+}
+
+
+esp_err_t handler_ota_pull_post(httpd_req_t *req)
+{
+    char query[700];
+    char value[600];
+    std::string url;
+
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
+        httpd_query_key_value(query, "url", value, sizeof(value)) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing parameter 'url'");
+        return ESP_FAIL;
+    }
+
+    url = urlDecode(value);
+
+    // Only release downloads of this fork are fetched (no arbitrary URLs on the device)
+    if (url.rfind(OTA_RELEASE_DOWNLOAD_PREFIX, 0) != 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "URL not allowed. Only comdata release downloads are supported");
+        return ESP_FAIL;
+    }
+
+    if (otaPullActive) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Download already running");
+        return ESP_FAIL;
+    }
+
+    std::string *urlCopy = new std::string(url);
+    if (xTaskCreate(&taskOtaPull, "taskOTAPull", 12288, urlCopy, tskIDLE_PRIORITY + 5, NULL) != pdPASS) {
+        delete urlCopy;
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to start download");
+        return ESP_FAIL;
+    }
+
+    otaPullActive = true;
+    setOtaPullStatus("running");
+
+    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_sendstr(req, "started");
+    return ESP_OK;
+}
+
+
+esp_err_t handler_ota_pull_get(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    httpd_resp_sendstr(req, otaPullStatus);
+    return ESP_OK;
+}
+
+
 // Uploads the OTA package, stages it and reboot
 esp_err_t handler_ota(httpd_req_t *req)
 {
@@ -740,6 +1102,18 @@ void registerOtaRebootUri(httpd_handle_t server)
     ESP_LOGI(TAG, "Registering URI handlers");
 
     httpd_uri_t camuri = {};
+    camuri.method = HTTP_POST;
+    camuri.uri = "/ota/pull"; // has to be registered before the wildcard /ota/* route
+    camuri.handler = HTTP_AUTH_BASIC(handler_ota_pull_post);
+    camuri.user_ctx = httpServerData;
+    httpd_register_uri_handler(server, &camuri);
+
+    camuri.method = HTTP_GET;
+    camuri.uri = "/ota/pull";
+    camuri.handler = HTTP_AUTH_BASIC(handler_ota_pull_get);
+    camuri.user_ctx = httpServerData;
+    httpd_register_uri_handler(server, &camuri);
+
     camuri.method = HTTP_POST;
     camuri.uri = "/ota/*";
     camuri.handler = HTTP_AUTH_BASIC(handler_ota);

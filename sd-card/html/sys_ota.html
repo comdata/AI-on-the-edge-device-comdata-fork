@@ -86,7 +86,7 @@
         <div class="card-body">
           <div class="info-box">
             <strong>Tip: </strong>Update everything in one step using the latest board firmware from
-            <a href="https://github.com/Slider0007/AI-on-the-edge-device/releases/latest" target="_blank" rel="noopener noreferrer">GitHub Releases</a>.<br><br>
+            <a href="https://github.com/comdata/AI-on-the-edge-device-comdata-fork/releases/latest" target="_blank" rel="noopener noreferrer">GitHub Releases</a>.<br><br>
             Your settings will be preserved during the OTA update. However, it's recommended creating a full configuration backup (<strong>System > Backup /
               Restore</strong>) from time to time.
           </div>
@@ -119,13 +119,34 @@
           </form>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-header"><span>Update from GitHub</span></div>
+        <div class="card-body">
+          <div class="info-box">
+            Downloads the latest release package of comdata/AI-on-the-edge-device-comdata-fork directly to the device. The device installs it after a restart.
+          </div>
+
+          <div class="info-block">
+            <span>Latest release:</span>
+            <span id="release_tag" class="badge-board">Unknown</span>
+          </div>
+
+          <div id="releaseStatus" style="color: var(--text-secondary); font-size: 0.9rem; min-height: 2.4em; margin-bottom: 10px">
+          </div>
+
+          <button class="button btn-wide btn-action" id="repoUpdateButton" type="button" onclick="installRepoUpdate()" disabled>
+            Install
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
   <script src="global.js?v=$COMMIT_HASH"></script>
   <script>
     // Max size of an individual file. Make sure this value is same as that set in server_file.c
-    const RELEASE_NOTES_URL = 'https://github.com/Slider0007/AI-on-the-edge-device/releases/latest';
+    const RELEASE_NOTES_URL = 'https://github.com/comdata/AI-on-the-edge-device-comdata-fork/releases/latest';
 
     let updateTimer = null;
 
@@ -427,8 +448,111 @@
     const getBoardType = () => loadInfo('board_type', 'board_type', 'board type');
     const getFirmwareVersion = () => loadInfo('firmware_version', 'firmware_version', 'firmware version');
 
-    getBoardType();
-    getFirmwareVersion();
+    // ------------------------------------------------------------------------------
+    // Update from the comdata fork's GitHub releases
+    // ------------------------------------------------------------------------------
+    const RELEASE_API_URL = 'https://api.github.com/repos/comdata/AI-on-the-edge-device-comdata-fork/releases/latest';
+    let repoAsset = null;
+
+    function setReleaseStatus(text) {
+      document.getElementById('releaseStatus').textContent = text;
+    }
+
+    async function checkRepoUpdate() {
+      setReleaseStatus('Checking latest release...');
+
+      let release;
+      try {
+        const response = await fetch(RELEASE_API_URL, {
+          headers: { Accept: 'application/vnd.github+json' },
+          cache: 'no-store'
+        });
+        if (!response.ok) {
+          setReleaseStatus(`GitHub request failed (HTTP ${response.status})`);
+          return;
+        }
+        release = await response.json();
+      } catch (error) {
+        setReleaseStatus('GitHub not reachable: ' + error.message);
+        return;
+      }
+
+      const board = document.getElementById('board_type').textContent.trim().toLowerCase();
+      const prefix = `AI-on-the-edge-device__${board}__comdataFork_`;
+      const asset = (release.assets || []).find(a => a.name.startsWith(prefix) && a.name.endsWith('.zip'));
+
+      if (!asset) {
+        setReleaseStatus(`No package for board "${board}" in release ${release.tag_name}`);
+        return;
+      }
+
+      repoAsset = asset;
+      document.getElementById('release_tag').textContent = release.tag_name;
+
+      const installed = document.getElementById('firmware_version').textContent.trim();
+      const size = (asset.size / 1024 / 1024).toFixed(1);
+      const button = document.getElementById('repoUpdateButton');
+
+      if (installed === release.tag_name) {
+        setReleaseStatus(`Installed version is up to date (${size} MB package)`);
+        button.textContent = 'Up to date';
+        button.disabled = true;
+      } else {
+        setReleaseStatus(`Package for this board: ${size} MB`);
+        button.textContent = `Install ${release.tag_name}`;
+        button.disabled = false;
+      }
+    }
+
+    async function installRepoUpdate() {
+      if (!repoAsset) return;
+
+      const button = document.getElementById('repoUpdateButton');
+      button.disabled = true;
+      setReleaseStatus('Starting download on device...');
+
+      const start = await apiCall('/ota/pull?url=' + encodeURIComponent(repoAsset.browser_download_url), { method: 'POST' });
+      if (!start.ok) {
+        setReleaseStatus('Device refused download: ' + (start.data || start.status));
+        button.disabled = false;
+        return;
+      }
+
+      firework.launch('The device downloads the update and restarts when done', 'success', 8000);
+
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < 180000) {
+        await sleep(2000);
+        const state = await apiCall('/ota/pull');
+        const text = (state.data || '').trim();
+
+        if (!state.ok) {
+          setReleaseStatus('Device not reachable (restarting)...');
+          continue;
+        }
+        setReleaseStatus('Status: ' + text);
+
+        if (text === 'done') {
+          checkStatus();
+          return;
+        }
+        if (text.startsWith('failed')) {
+          button.disabled = false;
+          firework.launch('Download failed: ' + text, 'danger', 30000);
+          return;
+        }
+      }
+
+      setReleaseStatus('Timeout. Check the device log.');
+      button.disabled = false;
+    }
+
+    (async () => {
+      await Promise.all([getBoardType(), getFirmwareVersion()]);
+      checkRepoUpdate();
+    })();
 
     window.addEventListener('DOMContentLoaded', () => {
       window.parent.postMessage({ type: 'iframe-ready' }, '*');
