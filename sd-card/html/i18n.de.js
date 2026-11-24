@@ -28,6 +28,7 @@ window.I18N_DICT = {
   "Are you sure you want to save the new alignment marker configuration?": "Neue Ausrichtungsmarker-Konfiguration wirklich speichern?",
   "Authentication": "Authentifizierung",
   "Authentication / Security": "Authentifizierung / Sicherheit",
+  "Basic Authentication": "Basic-Authentifizierung",
   "Auto (AEC2)": "Auto (AEC2)",
   "Auto Exposure Level": "Automatische Belichtungsstufe",
   "Auto-Refresh": "Automatisch aktualisieren",

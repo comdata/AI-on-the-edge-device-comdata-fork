@@ -40,24 +40,29 @@ renamed in upcoming major release. Check changelog for breaking changes.
 
 
 ### REST API Endpoint Security
-All REST API endpoints can be (limited) secured with basic HTTP authentication scheme. The endpoint authentication 
+All REST API endpoints can be (limited) secured. The endpoint authentication 
 has to be configured via WebUI: `Settings > Configuration > Section 'WebUI' > Authentication`.
 
+The WebUI itself uses a form based login (`/login`, session cookie valid for 24 hours or until the next reboot).
+REST clients normally authenticate with the basic HTTP authentication scheme, which has to be enabled separately
+(`Basic Authentication`).
+
 #### Security Considerations
-  - Only basic access authentication scheme using unencrypted HTTP protocol is implemented. 
-  - The basic authentication scheme is not a secure method of user authentication, nor does it in any way 
-    protect the entity, which is transmitted in cleartext (only Base64 encoded, not encrypted or hashed) 
-    across the physical network used as the carrier.
-  - All data (also security related data, e.g. password) are transmitted unencrypted (HTTP only, no HTTPS).
+  - Username and password are transmitted unencrypted (HTTP only, no HTTPS), basic authentication only Base64 encoded,
+    not encrypted or hashed. The basic authentication scheme is not a secure method of user authentication, nor does
+    it in any way protect the entity across the physical network used as the carrier.
 
 #### Usage
 1. Include `Authorization` header to REST API endpoint request
     - Header value: `Basic ` concatenated with Base64 encoded `USERNAME:PASSWORD`, e.g. `Basic abcdefghijklnm=`
 2. `http://{USERNAME}:{PASSWORD}@{IP-ADDRESS}/{REST API Endpoint}`, e.g. `http://username:password@192.168.4.1/info`
+3. Alternatively use the form based login: post `username` and `password` as `application/x-www-form-urlencoded` to
+   `/login` and reuse the `AIOTE_SESSION` cookie returned by the device on every following request.
 
 #### Endpoint Response
-If authorization is enabled and `Authorization` header is missing or authorization is rejected, system is responding 
-with status `401 Unauthorized`. Check REST API response message to get more details / rejection reason.
+If authorization is enabled and neither a valid session cookie nor a (allowed) `Authorization` header is provided,
+the system responds with status `401 Unauthorized` for REST API requests and redirects browser page requests to the
+login page. Check REST API response message to get more details / rejection reason.
 
 
 ### Migration notes (Removed / updated endpoints)

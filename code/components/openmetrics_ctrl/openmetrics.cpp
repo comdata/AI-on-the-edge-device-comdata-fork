@@ -247,7 +247,7 @@ void registerOpenmetricsUri(httpd_handle_t server)
     camuri.method = HTTP_GET;
 
     camuri.uri = "/metrics";
-    camuri.handler = HTTP_AUTH_BASIC(handler_openmetrics);
+    camuri.handler = HTTP_AUTH(handler_openmetrics);
     camuri.user_ctx = NULL;
     httpd_register_uri_handler(server, &camuri);
 }

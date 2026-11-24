@@ -2875,6 +2875,22 @@
 
                 <tr class="classvisibility_webui_authmode">
                   <td class="indent2">
+                    <span>Basic Authentication</span>
+                  </td>
+                  <td>
+                    <form id="webui_httpauth_basicauth_form">
+                      <select class="classvisibility_init" name="webui.httpauth.basicauth" id="webui_httpauth_basicauth_value"
+                        onchange="gatherChangedParameter(this.form)">
+                        <option value="false" selected>Disabled</option>
+                        <option value="true">Enabled</option>
+                      </select>
+                    </form>
+                  </td>
+                  <td style="visibility: hidden">$TOOLTIP_webui_httpauth_basicauth</td>
+                </tr>
+
+                <tr class="classvisibility_webui_authmode">
+                  <td class="indent2">
                     <span>Username</span>
                   </td>
                   <td>

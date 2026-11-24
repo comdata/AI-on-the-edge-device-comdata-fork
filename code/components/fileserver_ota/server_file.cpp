@@ -1076,7 +1076,7 @@ void registerFileserverUri(httpd_handle_t server, const char *basePath)
     httpd_uri_t file_download = {
         .uri = "/fileserver*", // Match all URIs of type /path/to/file
         .method = HTTP_GET,
-        .handler = HTTP_AUTH_BASIC(download_get_handler),
+        .handler = HTTP_AUTH(download_get_handler),
         .user_ctx = httpServerData // Pass server data as context
     };
     httpd_register_uri_handler(server, &file_download);
@@ -1084,7 +1084,7 @@ void registerFileserverUri(httpd_handle_t server, const char *basePath)
     httpd_uri_t file_upload = {
         .uri = "/upload/*", // Match all URIs of type /upload/path/to/file
         .method = HTTP_POST,
-        .handler = HTTP_AUTH_BASIC(upload_post_handler),
+        .handler = HTTP_AUTH(upload_post_handler),
         .user_ctx = httpServerData // Pass server data as context
     };
     httpd_register_uri_handler(server, &file_upload);
@@ -1092,7 +1092,7 @@ void registerFileserverUri(httpd_handle_t server, const char *basePath)
     httpd_uri_t file_delete = {
         .uri = "/delete/*", // Match all URIs of type /delete/path/to/file
         .method = HTTP_POST,
-        .handler = HTTP_AUTH_BASIC(delete_post_handler),
+        .handler = HTTP_AUTH(delete_post_handler),
         .user_ctx = httpServerData // Pass server data as context
     };
     httpd_register_uri_handler(server, &file_delete);
@@ -1100,7 +1100,7 @@ void registerFileserverUri(httpd_handle_t server, const char *basePath)
     httpd_uri_t coredump = {
         .uri = "/coredump",
         .method = HTTP_GET,
-        .handler = HTTP_AUTH_BASIC(coredump_handler),
+        .handler = HTTP_AUTH(coredump_handler),
         .user_ctx = httpServerData // Pass server data as context
     };
     httpd_register_uri_handler(server, &coredump);
@@ -1108,7 +1108,7 @@ void registerFileserverUri(httpd_handle_t server, const char *basePath)
     httpd_uri_t handler_logfile = {
         .uri = "/log",
         .method = HTTP_GET,
-        .handler = HTTP_AUTH_BASIC(handler_logfiles),
+        .handler = HTTP_AUTH(handler_logfiles),
         .user_ctx = httpServerData // Pass server data as context
     };
     httpd_register_uri_handler(server, &handler_logfile);
@@ -1116,7 +1116,7 @@ void registerFileserverUri(httpd_handle_t server, const char *basePath)
     httpd_uri_t handler_datafile = {
         .uri = "/data",
         .method = HTTP_GET,
-        .handler = HTTP_AUTH_BASIC(handler_datafiles),
+        .handler = HTTP_AUTH(handler_datafiles),
         .user_ctx = httpServerData // Pass server data as context
     };
     httpd_register_uri_handler(server, &handler_datafile);

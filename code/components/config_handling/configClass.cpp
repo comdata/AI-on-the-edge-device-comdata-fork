@@ -816,6 +816,7 @@ void ConfigClass::parseSectionWebUi(bool unityTest)
     auto &section = cfgDataTemp.sectionWebUi;
 
     cJsonUtils::parseIntClamped(webui, {"httpauth", "authmode"}, section.httpAuth.authMode, 0, 1);
+    cJsonUtils::parseBool(webui, {"httpauth", "basicauth"}, section.httpAuth.basicAuth);
     cJsonUtils::parseString(webui, {"httpauth", "username"}, section.httpAuth.username);
     parseSecretParameter(webui, {"httpauth", "password"}, section.httpAuth.password, "webui_httpauth", unityTest);
 
@@ -1238,6 +1239,7 @@ esp_err_t ConfigClass::serializeConfig(bool unityTest)
 
     cJSON *webuiHttpAuth = addObj(webui, "httpauth");
     addEl(webuiHttpAuth, "authmode", cfgDataTemp.sectionWebUi.httpAuth.authMode);
+    addEl(webuiHttpAuth, "basicauth", cfgDataTemp.sectionWebUi.httpAuth.basicAuth);
     addEl(webuiHttpAuth, "username", cfgDataTemp.sectionWebUi.httpAuth.username);
     addEl(webuiHttpAuth, "password", cfgDataTemp.sectionWebUi.httpAuth.password.empty() ? "" : "******");
 
@@ -1704,19 +1706,19 @@ void registerConfigFileUri(httpd_handle_t server)
     httpd_uri_t camuri = {};
 
     camuri.uri = "/config";
-    camuri.handler = HTTP_AUTH_BASIC(handlerGetConfigRequest);
+    camuri.handler = HTTP_AUTH(handlerGetConfigRequest);
     camuri.method = HTTP_GET;
     camuri.user_ctx = httpServerData; // Pass server data as context
     httpd_register_uri_handler(server, &camuri);
 
     camuri.uri = "/config";
-    camuri.handler = HTTP_AUTH_BASIC(handlerSetConfigRequest);
+    camuri.handler = HTTP_AUTH(handlerSetConfigRequest);
     camuri.method = HTTP_POST;
     camuri.user_ctx = httpServerData; // Pass server data as context
     httpd_register_uri_handler(server, &camuri);
 
     camuri.uri = "/config";
-    camuri.handler = HTTP_AUTH_BASIC(NULL);
+    camuri.handler = HTTP_AUTH(NULL);
     camuri.method = HTTP_OPTIONS;
     camuri.user_ctx = NULL;
     httpd_register_uri_handler(server, &camuri);

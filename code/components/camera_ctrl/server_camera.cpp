@@ -181,7 +181,7 @@ void registerCameraUri(httpd_handle_t server)
     camuri.method = HTTP_GET;
 
     camuri.uri = "/camera";
-    camuri.handler = HTTP_AUTH_BASIC(handler_camera);
+    camuri.handler = HTTP_AUTH(handler_camera);
     camuri.user_ctx = NULL;
     httpd_register_uri_handler(server, &camuri);
 }
