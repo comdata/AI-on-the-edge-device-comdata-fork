@@ -729,20 +729,32 @@ static bool otaIsNewerVersion(const std::string &candidate, const std::string &i
 // Note: esp_http_client only follows redirects in perform(); with open()/read() the caller has to do it.
 static bool otaHttpOpenPackage(esp_http_client_handle_t httpClient, int &httpStatusCode, int64_t &contentLength)
 {
+    char currentUrl[512];
+
     for (int redirect = 0; redirect < 5; ++redirect) {
-        if (esp_http_client_open(httpClient, 0) != ESP_OK) {
+        const esp_err_t openError = esp_http_client_open(httpClient, 0);
+        esp_http_client_get_url(httpClient, currentUrl, sizeof(currentUrl));
+
+        if (openError != ESP_OK) {
+            LogFile.writeToFile(ESP_LOG_ERROR, TAG,
+                                "OTA download: connect failed (hop " + std::to_string(redirect + 1) + ", error " +
+                                    intToHexString(openError) + ") | URL: " + currentUrl);
             return false;
         }
+
         contentLength = esp_http_client_fetch_headers(httpClient);
         httpStatusCode = esp_http_client_get_status_code(httpClient);
+        LogFile.writeToFile(ESP_LOG_INFO, TAG,
+                            "OTA download: hop " + std::to_string(redirect + 1) + " | HTTP " + std::to_string(httpStatusCode) +
+                                " | Size: " + std::to_string(contentLength) + " | URL: " + currentUrl);
 
         if (httpStatusCode != 301 && httpStatusCode != 302 && httpStatusCode != 303 && httpStatusCode != 307 && httpStatusCode != 308) {
             return true;
         }
         if (esp_http_client_set_redirection(httpClient) != ESP_OK) {
+            LogFile.writeToFile(ESP_LOG_ERROR, TAG, "OTA download: redirect without usable location");
             return false;
         }
-        esp_http_client_close(httpClient); // the redirect target is opened with the next loop iteration
     }
     return false;
 }
