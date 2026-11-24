@@ -6,14 +6,14 @@
 |---|---|
 | Host | `10.0.1.20` (mDNS `watermeter.local`), hostname `watermeter` |
 | Board | ESP32CAM (AI-on-the-Edge, ESP32, 8 MB PSRAM, SD 4 GB) |
-| Firmware | `feat/ha-api-on-develop` (seit 2026-11-15): `develop`/`v18.1.0-comdataFork` **plus** HA-API-Commit `8cd8668c` (Cherry-pick, `homeassistant_ctrl` + `ClassFlowHomeAssistant`), gebaut per GitHub-Actions-Artifact. Meldet `feat/ha-api-on-develop-ffdc2f8`. |
+| Firmware | `ha-api-form-login-4797fda` (seit 2026-11-24): `develop` (`v18.1.0-comdataFork` + HA-API-Cherry-pick `8cd8668c`) **plus** form based WebUI login, gebaut per GitHub-Actions-Artifact (`Build and Release`). Meldet `ha-api-form-login-4797fda`. |
 | WebUI | `http://10.0.1.20/` – responsive comdataFork-WebUI (`index.html` + Sidebar, `dashboard.html`, `edit_configuration.html`), plus lokale UI-Tweaks (Inline-Manifest, `aria-current`) |
 | Home Assistant | Wasserzähler hängt **nur** an der HA-API (REST, Push alle ~1 min), MQTT ist am Gerät aus und in HA vollständig entfernt (2026-11-15). |
 
 ## HTTP access (WebUI and every REST endpoint)
 
 The device runs with **WebUI authentication enabled** (`webui.httpauth.authmode = 1`).
-Since `ha-api-form-login-2b9d10c` (2026-11-24) the WebUI uses a **form based login**
+Since `ha-api-form-login-4797fda` (2026-11-24) the WebUI uses a **form based login**
 (`GET /login`, session cookie `AIOTE_SESSION`, 24 h or until reboot); a browser
 without a session is redirected there, REST requests get `401`. Basic auth is a
 separate switch (`webui.httpauth.basicauth`, firmware default `false`) — it is
@@ -92,7 +92,7 @@ The device answers `success`, reboots and stages the package; afterwards
 `firmware_version` and `html_version` must both report the new tag.
 
 As of 2026-11-24 the device runs such a develop-style build (version string
-`ha-api-form-login-2b9d10c`), even though earlier firmware came from the
+`ha-api-form-login-4797fda`), even though earlier firmware came from the
 `ha-api` line: `POST /ota/<file>.zip` works, `/ota?task=…` and
 `/upload/firmware/…` answer 404. Anything that builds with
 `.github/workflows/build-ha-api.yaml` only triggers on branches named
