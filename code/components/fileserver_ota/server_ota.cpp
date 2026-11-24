@@ -772,6 +772,8 @@ static bool otaDownloadPackage(const std::string &url)
     httpConfig.user_agent = "AI-on-the-Edge Device";
     httpConfig.timeout_ms = 20000;
     httpConfig.buffer_size = SERVER_OTA_SCRATCH_BUFSIZE;
+    // The signed URL behind GitHub's redirect is ~1.3 kB long and has to fit the request line
+    httpConfig.buffer_size_tx = 2048;
 
     esp_http_client_handle_t httpClient = esp_http_client_init(&httpConfig);
     if (httpClient == NULL) {
