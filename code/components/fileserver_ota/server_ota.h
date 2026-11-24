@@ -6,6 +6,8 @@
 
 void checkOtaUpdate();
 
+void startOtaAutoUpdate();
+
 void doReboot();
 void doRebootOTA();
 

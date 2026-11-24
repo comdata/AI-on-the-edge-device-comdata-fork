@@ -302,6 +302,7 @@ extern "C" void app_main(void)
     registerMainFlowTaskUri(server);
     registerFileserverUri(server, "/sdcard");
     registerOtaRebootUri(server);
+    startOtaAutoUpdate();
 #ifdef ENABLE_MQTT
     registerMqttUri(server);
 #endif // ENABLE_MQTT
