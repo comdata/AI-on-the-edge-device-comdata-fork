@@ -256,3 +256,17 @@ its own markup for it:
   and the parameter tooltips (`docs/Configuration/Parameter/*.md`, compiled into
   `/tooltips.json` by `tools/webui/generate_param_tooltips.py`). Those are a
   separate, much larger batch.
+
+## Dependency updates (Dependabot)
+
+`.github/dependabot.yml` covers the two ecosystems this repo has manifests for:
+
+* `github-actions` – the `uses:` pins in `.github/workflows/` (monthly, grouped into one PR).
+* `pip` – `requirements.txt` at the repo root (`markdown`, `esp_idf_size`), which both build
+  workflows install with `pip install -r requirements.txt`. PlatformIO itself stays
+  unpinned on purpose (the build tracks the latest core).
+
+PlatformIO (`code/platformio.ini`) and the ESP-IDF managed components
+(`code/components/*/idf_component.yml`) have no Dependabot ecosystem and stay manual, as
+does the HA integration (empty `requirements` list). Whether Dependabot version updates and
+alerts are on is a repo setting; the sandbox token has no admin right there.
