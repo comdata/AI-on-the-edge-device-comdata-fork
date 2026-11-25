@@ -42,15 +42,15 @@ curl -c /tmp/aioe.txt -d 'username=aiote&password=rtJMMja9Hwf5HqM95YHKQKrg&next=
   http://10.0.1.20/login
 curl -b /tmp/aioe.txt http://10.0.1.20/info
 curl -s -o raw.jpg -b /tmp/aioe.txt http://10.0.1.20/img_tmp/raw.jpg
-curl -b /tmp/aioe.txt http://10.0.1.20/logout   # clears the session for everybody
+curl -b /tmp/aioe.txt http://10.0.1.20/logout   # ends only this session
 
 # basic auth – only while basicauth is enabled (it is off on this device)
 curl -u aiote:'rtJMMja9Hwf5HqM95YHKQKrg' http://10.0.1.20/info
 ```
 
-Sessions live in RAM: one token at a time, a new login logs the previous client
-out, and a reboot ends all sessions. So a second WebUI login (or a reboot) kicks
-the Home Assistant integration's cookie out on its next poll.
+Sessions live in RAM (four slots, 24 h each), so the WebUI, a second browser and
+the Home Assistant integration do not log each other out; a reboot ends all
+sessions, and `GET /logout` clears only the caller's own session.
 
 The same credentials are stored in the Home Assistant helper secrets
 (`aioe_user` / `aioe_password`) and in the earlier HA integration entry.

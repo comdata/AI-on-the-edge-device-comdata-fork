@@ -85,8 +85,9 @@ How the custom integration authenticates against the device:
 - It logs in with `POST /login` (`username`, `password`, `next`) and keeps the
   `AIOTE_SESSION` cookie for all following `/process_data`, `/info` and image
   requests.
-- On `401` it logs in again and retries; a device reboot or a second WebUI login
-  ends the session in RAM, so the next poll simply logs in again.
+- On `401` it logs in again and retries; a device reboot clears the sessions in
+  RAM, so the next poll simply logs in again. The device keeps four session slots,
+  so a WebUI login does not push the integration out.
 - HTTP basic auth is only a fallback for old firmware that answers `404` on
   `POST /login`; on current firmware `webui.httpauth.basicauth` can stay off.
 

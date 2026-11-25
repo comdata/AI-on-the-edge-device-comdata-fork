@@ -622,6 +622,21 @@ const I18N_ATTRS = ['title', 'placeholder', 'alt', 'aria-label'];
 const I18N_SKIP = ['SCRIPT', 'STYLE', 'CODE', 'PRE', 'TEXTAREA'];
 const i18nKnown = (lang) => lang === 'en' || !!I18N_SOURCES[lang];
 
+// global.js's cache-busting version, used for dictionaries loaded later on a language switch
+const I18N_VERSION = new URL(document.currentScript?.src || location.href, location.href).searchParams.get('v');
+const i18nLoaded = {};
+
+function i18nLoad(lang, done) {
+  if (lang === 'en' || i18nLoaded[lang] || !I18N_SOURCES[lang]) return done();
+  const script = document.createElement('script');
+  script.src = I18N_VERSION ? `${I18N_SOURCES[lang]}?v=${I18N_VERSION}` : I18N_SOURCES[lang];
+  script.onload = () => {
+    i18nLoaded[lang] = true;
+    done();
+  };
+  document.head.appendChild(script);
+}
+
 function getLanguage() {
   let lang;
   try { lang = localStorage.getItem('lang'); } catch (e) { }
@@ -634,18 +649,30 @@ function getLanguage() {
 function setLanguage(lang) {
   try { localStorage.setItem('lang', lang); } catch (e) { }
   document.cookie = `lang=${lang};path=/;max-age=${60 * 60 * 24 * 400};SameSite=Lax`;
-  location.reload();
+  // Switch in place: a reload would drop the login session of the page's frames
+  i18nLoad(lang, () => {
+    document.documentElement.lang = lang;
+    i18nStart();
+    const select = document.getElementById('langSelect');
+    if (select) select.value = lang;
+    for (const frame of document.querySelectorAll('iframe')) {
+      try { frame.contentWindow.setLanguage(lang); } catch (e) { }
+    }
+  });
 }
 
 const i18nKey = (text) => text.replace(/\s+/g, ' ').trim();
 const i18nLookup = (text) => window.I18N_DICT && window.I18N_DICT[i18nKey(text)];
 
 function i18nTextNode(node) {
-  const translation = i18nLookup(node.nodeValue);
-  if (!translation) return;
-  const lead = node.nodeValue.match(/^\s*/)[0];
-  const trail = node.nodeValue.match(/\s*$/)[0];
-  node.nodeValue = lead + translation + trail;
+  // Keep the English source so switching back needs no reload
+  if (node.__i18nSource === undefined) node.__i18nSource = node.nodeValue;
+  const source = node.__i18nSource;
+  const translation = i18nLookup(source);
+  const lead = source.match(/^\s*/)[0];
+  const trail = source.match(/\s*$/)[0];
+  const next = translation ? lead + translation + trail : source;
+  if (node.nodeValue !== next) node.nodeValue = next;
 }
 
 function i18nApply(root) {
@@ -655,14 +682,33 @@ function i18nApply(root) {
   if (I18N_SKIP.includes(root.tagName) || root.classList.contains('no-i18n')) return;
   for (const attr of I18N_ATTRS) {
     const value = root.getAttribute(attr);
-    if (value && i18nLookup(value)) root.setAttribute(attr, i18nLookup(value));
+    if (value === null) continue;
+    const sources = root.__i18nSourceAttrs || (root.__i18nSourceAttrs = {});
+    if (!(attr in sources)) sources[attr] = value;
+    const next = i18nLookup(sources[attr]) || sources[attr];
+    if (value !== next) root.setAttribute(attr, next);
   }
   for (const child of root.childNodes) i18nApply(child);
 }
 
+let i18nTitleSource = null;
+
+function i18nTitleApply() {
+  const translated = i18nLookup(i18nTitleSource || '');
+  if (i18nTitleSource === null || (document.title !== i18nTitleSource && document.title !== translated)) {
+    i18nTitleSource = document.title;
+  }
+  const next = i18nLookup(i18nTitleSource) || i18nTitleSource;
+  if (document.title !== next) document.title = next;
+}
+
+let i18nStarted = false;
+
 function i18nStart() {
-  if (document.title) document.title = i18nLookup(document.title) || document.title;
+  i18nTitleApply();
   i18nApply(document.body);
+  if (i18nStarted) return;
+  i18nStarted = true;
   new MutationObserver((mutations) => {
     for (const m of mutations) {
       if (m.type === 'characterData') i18nTextNode(m.target);
@@ -688,15 +734,10 @@ function i18nStart() {
   document.documentElement.lang = lang;
   if (lang === 'en') return;
 
-  // Carry global.js's cache-busting version over, otherwise a cached dictionary never updates
-  const version = new URL(document.currentScript?.src || location.href, location.href).searchParams.get('v');
-  const script = document.createElement('script');
-  script.src = version ? `${I18N_SOURCES[lang]}?v=${version}` : I18N_SOURCES[lang];
-  script.onload = () => {
+  i18nLoad(lang, () => {
     if (document.body) i18nStart();
     else document.addEventListener('DOMContentLoaded', i18nStart);
-  };
-  document.head.appendChild(script);
+  });
 
   document.addEventListener('DOMContentLoaded', () => {
     const select = document.getElementById('langSelect');

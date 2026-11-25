@@ -17,11 +17,13 @@
 static const char *TAG = "HTTPAUTH";
 
 static const char *SESSION_COOKIE_NAME = "AIOTE_SESSION";
-// Session lives in RAM, so a reboot logs everybody out. One session is shared by all clients
-// shortcut: single session token, a second login logs the first client out; upgrade to a small token table if needed
+// Sessions live in RAM, so a reboot logs everybody out. A few slots so the WebUI, the
+// Home Assistant integration and a second browser do not log each other out.
 static constexpr int64_t SESSION_TIMEOUT_US = 24LL * 60 * 60 * 1000000; // 24 hours
-static char sessionToken[33] = {};                                       // 32 hex chars + '\0', empty = no session
-static int64_t sessionCreatedUs = 0;
+static constexpr size_t SESSION_SLOTS = 4;
+static char sessionTokens[SESSION_SLOTS][33] = {}; // 32 hex chars + '\0', empty = free slot
+static int64_t sessionCreatedUs[SESSION_SLOTS] = {};
+static size_t sessionSlot = 0;
 
 
 static bool secretEquals(const std::string &expected, const std::string &given)
@@ -37,29 +39,56 @@ static bool secretEquals(const std::string &expected, const std::string &given)
 }
 
 
-static bool sessionActive()
+static bool sessionValid(const char *token)
 {
-    return sessionToken[0] != '\0' && (esp_timer_get_time() - sessionCreatedUs) < SESSION_TIMEOUT_US;
+    if (token == nullptr || token[0] == '\0') {
+        return false;
+    }
+    for (size_t slot = 0; slot < SESSION_SLOTS; slot++) {
+        if (sessionTokens[slot][0] == '\0') {
+            continue;
+        }
+        if ((esp_timer_get_time() - sessionCreatedUs[slot]) >= SESSION_TIMEOUT_US) {
+            sessionTokens[slot][0] = '\0';
+            continue;
+        }
+        if (secretEquals(std::string(sessionTokens[slot]), std::string(token))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 
 static void createSession()
 {
+    // Round robin: the oldest slot is reused once all of them are taken
+    sessionSlot = (sessionSlot + 1) % SESSION_SLOTS;
+    char *token = sessionTokens[sessionSlot];
+
     constexpr char hexDigits[] = "0123456789abcdef";
     const uint32_t randomValues[4] = {esp_random(), esp_random(), esp_random(), esp_random()};
     for (size_t i = 0; i < sizeof(randomValues) / sizeof(randomValues[0]); i++) {
         for (size_t nibble = 0; nibble < 8; nibble++) {
-            sessionToken[i * 8 + nibble] = hexDigits[(randomValues[i] >> (nibble * 4)) & 0x0F];
+            token[i * 8 + nibble] = hexDigits[(randomValues[i] >> (nibble * 4)) & 0x0F];
         }
     }
-    sessionToken[32] = '\0';
-    sessionCreatedUs = esp_timer_get_time();
+    token[32] = '\0';
+    sessionCreatedUs[sessionSlot] = esp_timer_get_time();
 }
 
 
-static void clearSession()
+static void clearSession(const char *token)
 {
-    sessionToken[0] = '\0';
+    // Log out only the client that asked for it
+    if (token == nullptr || token[0] == '\0') {
+        return;
+    }
+    for (size_t slot = 0; slot < SESSION_SLOTS; slot++) {
+        if (sessionTokens[slot][0] != '\0' && secretEquals(std::string(sessionTokens[slot]), std::string(token))) {
+            sessionTokens[slot][0] = '\0';
+        }
+    }
 }
 
 
@@ -170,7 +199,7 @@ static bool hasValidSessionCookie(httpd_req_t *req)
     if (!getCookieValue(req, SESSION_COOKIE_NAME, token, sizeof(token))) {
         return false;
     }
-    return sessionActive() && secretEquals(std::string(sessionToken), std::string(token));
+    return sessionValid(token);
 }
 
 
@@ -346,8 +375,8 @@ esp_err_t handleLoginPost(httpd_req_t *req)
     LogFile.writeToFile(ESP_LOG_INFO, TAG, "Login successful");
 
     char cookie[160];
-    snprintf(cookie, sizeof(cookie), "%s=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d", SESSION_COOKIE_NAME, sessionToken,
-             (int)(SESSION_TIMEOUT_US / 1000000));
+    snprintf(cookie, sizeof(cookie), "%s=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d", SESSION_COOKIE_NAME,
+             sessionTokens[sessionSlot], (int)(SESSION_TIMEOUT_US / 1000000));
 
     httpd_resp_set_status(req, "303 See Other");
     httpd_resp_set_hdr(req, "Set-Cookie", cookie);
@@ -358,7 +387,9 @@ esp_err_t handleLoginPost(httpd_req_t *req)
 
 esp_err_t handleLogoutGet(httpd_req_t *req)
 {
-    clearSession();
+    char token[34] = {};
+    getCookieValue(req, SESSION_COOKIE_NAME, token, sizeof(token));
+    clearSession(token);
 
     char cookie[96];
     snprintf(cookie, sizeof(cookie), "%s=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0", SESSION_COOKIE_NAME);
