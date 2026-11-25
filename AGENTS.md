@@ -6,7 +6,7 @@
 |---|---|
 | Host | `10.0.1.20` (mDNS `watermeter.local`), hostname `watermeter` |
 | Board | ESP32CAM (AI-on-the-Edge, ESP32, 8 MB PSRAM, SD 4 GB) |
-| Firmware | `ha-api-form-login-4797fda` (seit 2026-11-24): `develop` (`v18.1.0-comdataFork` + HA-API-Cherry-pick `8cd8668c`) **plus** form based WebUI login, gebaut per GitHub-Actions-Artifact (`Build and Release`). Meldet `ha-api-form-login-4797fda`. |
+| Firmware | `develop-f849ee8` (seit 2026-11-25): Branch-Build von `develop` (`Build and Release`, Artifact `AI-on-the-edge-device__esp32cam__comdataFork_develop-f849ee8`) mit Formular-Login (Standard, Basic aus), vier Session-Slots und Sprachwechsel ohne Reload. Meldet `develop-f849ee8`. Ein Release-Tag mit diesem Stand gibt es noch nicht – der Auto-Updater (`/ota/pull`) lässt Branch-Builds in Ruhe. |
 | WebUI | `http://10.0.1.20/` – responsive comdataFork-WebUI (`index.html` + Sidebar, `dashboard.html`, `edit_configuration.html`), plus lokale UI-Tweaks (Inline-Manifest, `aria-current`) |
 | Home Assistant | Wasserzähler hängt **nur** an der HA-API (REST, Push alle ~1 min), MQTT ist am Gerät aus und in HA vollständig entfernt (2026-11-15). |
 
