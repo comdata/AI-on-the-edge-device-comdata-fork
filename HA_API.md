@@ -53,7 +53,7 @@ built-in *Generic Camera* integration (no custom code):
 ```yaml
 # Settings → Devices & services → Add integration → Generic camera
 still_image_url: http://10.0.1.20/img_tmp/raw.jpg      # or /img_tmp/alg_roi.jpg (with ROIs)
-username: aiote                                        # WebUI HTTP auth of the device
+username: aiote                                        # WebUI login user (device needs basicauth on)
 password: <device password>
 ```
 
@@ -79,6 +79,16 @@ service: rest_command.aioe_set_config
 data:
   config: '{"operationmode": {"automaticprocessinterval": "2.00"}}'
 ```
+
+How the custom integration authenticates against the device:
+
+- It logs in with `POST /login` (`username`, `password`, `next`) and keeps the
+  `AIOTE_SESSION` cookie for all following `/process_data`, `/info` and image
+  requests.
+- On `401` it logs in again and retries; a device reboot or a second WebUI login
+  ends the session in RAM, so the next poll simply logs in again.
+- HTTP basic auth is only a fallback for old firmware that answers `404` on
+  `POST /login`; on current firmware `webui.httpauth.basicauth` can stay off.
 
 ## Behaviour notes
 

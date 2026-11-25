@@ -12,13 +12,24 @@
 
 ## HTTP access (WebUI and every REST endpoint)
 
-The device runs with **WebUI authentication enabled** (`webui.httpauth.authmode = 1`).
-Since `ha-api-form-login-4797fda` (2026-11-24) the WebUI uses a **form based login**
-(`GET /login`, session cookie `AIOTE_SESSION`, 24 h or until reboot); a browser
-without a session is redirected there, REST requests get `401`. Basic auth is a
-separate switch (`webui.httpauth.basicauth`, firmware default `false`) — it is
-**enabled on this device** so the Home Assistant integration and every `curl -u`
-below keep working.
+The device runs with **WebUI authentication enabled** (`webui.httpauth.authmode = 1`)
+and since `ha-api-form-login-4797fda` (2026-11-24) uses a **form based login**:
+
+* `GET /login` serves `sd-card/html/login.html`; `POST /login` takes
+  `application/x-www-form-urlencoded` fields `username`, `password`, `next` and
+  answers `303 See Other` with
+  `Set-Cookie: AIOTE_SESSION=<32 hex>; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`.
+  Wrong credentials redirect to `/login?err=1&next=…`.
+* `GET /logout` clears the session.
+* Browser requests without a session get `303 /login?next=…`; requests that do
+  **not** send `Accept: text/html` get `401`.
+
+The HTTP basic auth scheme is now a **separate, optional switch**
+(`webui.httpauth.basicauth`, boolean, **firmware default `false`**). It exists for
+clients that cannot keep a cookie. **It is off on this device.** Turn it on/off in
+the WebUI under *Configuration → WebUI → Basic Authentication* (checkbox), or by
+posting the config (`POST /config{"webui":{"httpauth":{"basicauth":true}}}`), which
+also needs a reboot or `?reload=true` like every other config change.
 
 ```
 User:     aiote
@@ -26,19 +37,20 @@ Password: rtJMMja9Hwf5HqM95YHKQKrg
 ```
 
 ```bash
-# REST (basic auth, works because basicauth is enabled on this device)
-curl -u aiote:'rtJMMja9Hwf5HqM95YHKQKrg' http://10.0.1.20/info
-curl -s -o raw.jpg -u aiote:'rtJMMja9Hwf5HqM95YHKQKrg' http://10.0.1.20/img_tmp/raw.jpg
-
-# session cookie (the way a browser does it; use when basicauth is off)
+# session cookie – works everywhere, no basicauth needed
 curl -c /tmp/aioe.txt -d 'username=aiote&password=rtJMMja9Hwf5HqM95YHKQKrg&next=/' \
   http://10.0.1.20/login
 curl -b /tmp/aioe.txt http://10.0.1.20/info
+curl -s -o raw.jpg -b /tmp/aioe.txt http://10.0.1.20/img_tmp/raw.jpg
 curl -b /tmp/aioe.txt http://10.0.1.20/logout   # clears the session for everybody
+
+# basic auth – only while basicauth is enabled (it is off on this device)
+curl -u aiote:'rtJMMja9Hwf5HqM95YHKQKrg' http://10.0.1.20/info
 ```
 
 Sessions live in RAM: one token at a time, a new login logs the previous client
-out, and a reboot ends all sessions.
+out, and a reboot ends all sessions. So a second WebUI login (or a reboot) kicks
+the Home Assistant integration's cookie out on its next poll.
 
 The same credentials are stored in the Home Assistant helper secrets
 (`aioe_user` / `aioe_password`) and in the earlier HA integration entry.
@@ -110,9 +122,12 @@ tags `v<version>-comdataFork` and attaches board ZIPs named
 
 ```bash
 gh release download v<version>-comdataFork -p "*__esp32cam__comdataFork_*.zip" -D /tmp/ota
-curl -u aiote:'<password>' --data-binary @/tmp/ota/*.zip \
+curl -b /tmp/aioe.txt --data-binary @/tmp/ota/*.zip \
   "http://10.0.1.20/ota/$(basename /tmp/ota/*.zip)"
 ```
+
+(`/tmp/aioe.txt` is the cookie jar from the login in *HTTP access*; `-u aiote:<password>`
+works only while `basicauth` is enabled.)
 
 The device answers `success`, reboots and stages the package; afterwards
 `firmware_version` and `html_version` must both report the new tag.
@@ -133,11 +148,11 @@ understand that staged flow – use their route instead, which unzips straight
 into `/sdcard` (so `/html` is replaced in the same step):
 
 ```bash
-curl -u aiote:'<password>' --data-binary @pkg.zip \
+curl -b /tmp/aioe.txt --data-binary @pkg.zip \
   "http://10.0.1.20/upload/firmware/pkg.zip?overwrite=true"   # 303
-curl -u aiote:'<password>' \
+curl -b /tmp/aioe.txt \
   "http://10.0.1.20/ota?task=update&file=pkg.zip"             # answers "reboot"
-curl -u aiote:'<password>' "http://10.0.1.20/reboot"
+curl -b /tmp/aioe.txt "http://10.0.1.20/reboot"
 ```
 
 Gotchas:
@@ -235,7 +250,7 @@ Die WebUI liegt auf der SD-Karte unter `/html` und wird vom Dateiserver
 deshalb direkt ersetzen – kein Flash, kein Reboot, sofort sichtbar:
 
 ```bash
-curl -u aiote:'<password>' -X POST --data-binary @sd-card/html/style.css \
+curl -b /tmp/aioe.txt -X POST --data-binary @sd-card/html/style.css \
   "http://10.0.1.20/upload/html/style.css?overwrite=true"
 ```
 

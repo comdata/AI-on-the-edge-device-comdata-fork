@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import aiohttp
-
 from homeassistant.components.camera import Camera
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -38,13 +35,4 @@ class AiotCamera(CoordinatorEntity[AiotCoordinator], Camera):
 
     async def async_camera_image(self, width: int | None = None, height: int | None = None) -> bytes | None:
         image = CAMERA_IMAGES.get(self.coordinator.camera_image, CAMERA_IMAGES["alg"])
-        session = async_get_clientsession(self.hass)
-        async with session.get(
-            f"{self.coordinator.base_url}/img_tmp/{image}",
-            auth=self.coordinator.auth,
-            timeout=aiohttp.ClientTimeout(total=30),
-            ssl=False if not self.coordinator.verify_ssl else None,
-        ) as response:
-            if response.status != 200:
-                return None
-            return await response.read()
+        return await self.coordinator.async_get_bytes(f"/img_tmp/{image}")

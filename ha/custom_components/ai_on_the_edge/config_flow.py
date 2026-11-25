@@ -11,6 +11,7 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.selector import (
     TextSelector,
     TextSelectorConfig,
@@ -64,6 +65,8 @@ class AiotConfigFlow(ConfigFlow, domain=DOMAIN):
                 use_ssl,
                 verify_ssl,
             )
+        except ConfigEntryAuthFailed:
+            return None, {"base": "auth"}
         except aiohttp.ClientResponseError as err:
             return None, {"base": "auth" if err.status == 401 else "cannot_connect"}
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
