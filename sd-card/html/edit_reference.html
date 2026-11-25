@@ -823,13 +823,28 @@
       const x1 = Math.ceil(width * 0.85);
       const y0 = Math.floor(height * 0.15);
       const y1 = Math.ceil(height * 0.85);
-      const pixels = ctxTmp.getImageData(x0, y0, x1 - x0, y1 - y0).data;
+      const pixels = ctxTmp.getImageData(0, 0, width, height).data;
       const hist = new Uint32Array(256);
       let total = 0;
-      for (let i = 0; i < pixels.length; i += 4) {
-        hist[(pixels[i] * 77 + pixels[i + 1] * 150 + pixels[i + 2] * 29) >> 8]++;
-        total++;
+      let gradient = 0;
+      let gradientCount = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * width + x) * 4;
+          const gray = (pixels[i] * 77 + pixels[i + 1] * 150 + pixels[i + 2] * 29) >> 8;
+          hist[gray]++;
+          total++;
+          if (x > x0 && x < x1 - 1 && y > y0 && y < y1 - 1) {
+            const left = (pixels[i - 4] * 77 + pixels[i - 3] * 150 + pixels[i - 2] * 29) >> 8;
+            const right = (pixels[i + 4] * 77 + pixels[i + 5] * 150 + pixels[i + 6] * 29) >> 8;
+            const up = (pixels[i - width * 4] * 77 + pixels[i - width * 4 + 1] * 150 + pixels[i - width * 4 + 2] * 29) >> 8;
+            const down = (pixels[i + width * 4] * 77 + pixels[i + width * 4 + 1] * 150 + pixels[i + width * 4 + 2] * 29) >> 8;
+            gradient += Math.abs(right - left) + Math.abs(down - up);
+            gradientCount++;
+          }
+        }
       }
+      const meanGradient = gradientCount ? gradient / gradientCount : 0;
 
       const percentile = (p) => {
         let acc = 0;
@@ -844,7 +859,7 @@
       for (let i = 0; i <= 5; i++) clipped += hist[i];
       for (let i = 250; i < 256; i++) clipped += hist[i];
 
-      return percentile(0.98) - percentile(0.02) - 300 * (clipped / total);
+      return 10 * meanGradient + percentile(0.98) - percentile(0.02) - 60 * (clipped / total);
     }
 
     async function imageDataFromBlob(blob) {
@@ -942,13 +957,18 @@
         const skew = window.AutoRoi.estimateSkew(pixels);
         setAutoField('imagealignment_imagerotation_value', skew.angle.toFixed(1));
 
-        jsonConfigModifiedDelta = {};
-        gatherChangedParameter(document.getElementById('takeimage_flashlight_flashintensity_form'), true);
-        gatherChangedParameter(document.getElementById('takeimage_camera_autoexposurelevel_form'), true);
-        gatherChangedParameter(document.getElementById('takeimage_camera_manualexposurevalue_form'), true);
-        gatherChangedParameter(document.getElementById('imagealignment_imagerotation_form'), false);
-        jsonConfigModifiedDelta.imagealignment = jsonConfigModifiedDelta.imagealignment || {};
-        jsonConfigModifiedDelta.imagealignment.alignmentalgo = 3;
+        // The camera controls are disabled while a reference is shown, so build
+        // the delta from the chosen values directly instead of FormData.
+        jsonConfigModifiedDelta = {
+          takeimage: {
+            flashlight: { flashintensity: parseInt(best.params.flashintensity, 10) },
+            camera: {
+              autoexposurelevel: parseInt(best.params.autoexposurelevel, 10),
+              manualexposurevalue: parseInt(best.params.manualexposurevalue, 10),
+            },
+          },
+          imagealignment: { imagerotation: skew.angle, alignmentalgo: 3 },
+        };
 
         status.textContent = 'Auto-Adjust: saving reference image ...';
         specialeffect = best.params.specialeffect;

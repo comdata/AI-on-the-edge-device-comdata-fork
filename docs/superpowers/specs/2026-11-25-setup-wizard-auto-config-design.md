@@ -119,22 +119,27 @@ AutoRoi.scaleRois(rois, factor)                           -> rois in original pi
 Exposed as `window.AutoRoi`; `module.exports = AutoRoi` when `module` exists.
 
 **Digit search**
-1. Grayscale, longest side ≤ 600 px.
-2. Vertical Sobel gradient `|Gx|`; sum per row; find the contiguous band whose
-   row score is clearly above the median (height 12 px … 30 % of the image).
-3. Column profile inside the band; autocorrelation in period range 8…60 px; keep
-   the strongest peak with at least three repetitions.
-4. Derive box count `N = clamp(round(bandWidth / period), 3, 9)`, align boxes to
-   the phase with the highest ink contrast, expand each box by 10 % margin.
-5. `confidence = periodicityStrength * uniformity`; below 0.35 no proposal.
+1. Grayscale, longest side ≤ 600 px; vertical gradient `|Gx|` per row.
+2. Row segments with elevated edge activity are the candidate bands; each is
+   expanded until the digit strokes fit.
+3. Inside a band, dark and bright connected components are extracted with a
+   percentile threshold (both polarities are tried).
+4. Components are filtered by height/width/area, then aligned by their y centre.
+   Components are split into runs where the centre pitch deviates more than
+   ±30 % from the median pitch, which drops units such as `m³`.
+5. The longest run of 3…9 components becomes the proposal; common y and height
+   are taken from the run, each box is expanded by 40 % width and 20 % height.
+6. `confidence = count/5 * (1 - height variation)`; below 0.3 no proposal.
 
 **Analog search**
-1. Grayscale, longest side ≤ 500 px; Sobel edge magnitude, threshold.
-2. Hough circle vote for radii 6…30 px; non-maximum suppression.
-3. Keep circles with at least 45 % circumference support; group circles of similar
-   radius and vertical position; return the largest group, up to 6 dials.
-4. Box = square of side `2.2 * r` around the centre; `confidence` from vote strength
-   and group size.
+1. First try coloured pointer blobs (RGBA, red-dominant, connected components,
+   area/aspect filters). The blob centroid is near the dial centre; the box is
+   a square of `1.9 * pointer length`, up to 6 dials. This is what works on the
+   reference meter in this repo.
+2. Fallback: grayscale Hough for dial rims (radii 6…30 px downscaled), centre
+   votes summed over a 7×7 box, radial-gradient support ≥ 0.45, grouped by radius
+   and row.
+3. `confidence` from the number of found dials and their support.
 
 **Skew**
 Search −15°…+15° in 0.5° steps over the detected band; metric is the variance of

@@ -97,122 +97,167 @@
     });
   }
 
-  // Strongest repeating period in a column profile (8..60 px) and its strength.
-  function bestPeriod(col) {
-    const n = col.length;
-    let mean = 0;
-    for (let i = 0; i < n; i++) mean += col[i];
-    mean /= n;
-
-    let variance = 0;
-    for (let i = 0; i < n; i++) variance += (col[i] - mean) * (col[i] - mean);
-    if (variance < 1e-6) return { lag: 0, score: 0, mean, variance: 0 };
-
-    let best = { lag: 0, score: 0, mean, variance };
-    const maxLag = Math.min(60, Math.floor(n / 3));
-    for (let lag = 8; lag <= maxLag; lag++) {
-      let sum = 0;
-      let count = 0;
-      for (let i = lag; i < n; i++) {
-        sum += (col[i] - mean) * (col[i - lag] - mean);
-        count++;
+  // Connected dark/bright blobs inside a row band.
+  function blobs(gray, top, bottom, threshold, bright) {
+    const { width: w, data } = gray;
+    const h = bottom - top + 1;
+    const mask = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const v = data[(top + y) * w + x];
+        if (bright ? v >= threshold : v <= threshold) mask[y * w + x] = 1;
       }
-      const score = sum / count / (variance / n);
-      if (score > best.score) best = { lag, score, mean, variance };
+    }
+
+    const comps = [];
+    const stack = [];
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const start = y * w + x;
+        if (!mask[start]) continue;
+        let x0 = x;
+        let x1 = x;
+        let y0 = y;
+        let y1 = y;
+        let area = 0;
+        stack.push(start);
+        mask[start] = 0;
+        while (stack.length) {
+          const p = stack.pop();
+          const px = p % w;
+          const py = (p / w) | 0;
+          area++;
+          if (px < x0) x0 = px;
+          if (px > x1) x1 = px;
+          if (py < y0) y0 = py;
+          if (py > y1) y1 = py;
+          for (let dy = -1; dy <= 1; dy++) {
+            const ny = py + dy;
+            if (ny < 0 || ny >= h) continue;
+            for (let dx = -1; dx <= 1; dx++) {
+              const nx = px + dx;
+              if (nx < 0 || nx >= w) continue;
+              const q = ny * w + nx;
+              if (mask[q]) {
+                mask[q] = 0;
+                stack.push(q);
+              }
+            }
+          }
+        }
+        comps.push({ x0, y0: y0 + top, x1, y1: y1 + top, area });
+      }
+    }
+    return comps;
+  }
+
+  // Digit boxes in one row band, from the blobs that form a regular row.
+  function digitBoxesInBand(gray, top, bottom) {
+    const h = bottom - top + 1;
+    if (h < 8) return null;
+
+    const samples = [];
+    for (let y = top; y <= bottom; y++) {
+      for (let x = 0; x < gray.width; x += 2) samples.push(gray.data[y * gray.width + x]);
+    }
+    const p05 = percentile(samples, 0.05);
+    const p50 = percentile(samples, 0.5);
+    const p95 = percentile(samples, 0.95);
+
+    let best = null;
+    for (const bright of [false, true]) {
+      const threshold = bright ? p50 + (p95 - p50) * 0.35 : p50 - (p50 - p05) * 0.35;
+      const filtered = blobs(gray, top, bottom, threshold, bright).filter((c) => {
+        const cw = c.x1 - c.x0 + 1;
+        const ch = c.y1 - c.y0 + 1;
+        return ch >= h * 0.3 && ch <= h * 1.2 && cw >= 5 && cw <= ch * 1.2 && c.area >= 0.12 * cw * ch;
+      });
+      if (filtered.length < 3) continue;
+
+      const medH = median(filtered.map((c) => c.y1 - c.y0 + 1));
+      const medW = median(filtered.map((c) => c.x1 - c.x0 + 1));
+      const medCy = median(filtered.map((c) => (c.y0 + c.y1) / 2));
+      const row = filtered
+        .filter((c) => {
+          const cw = c.x1 - c.x0 + 1;
+          const ch = c.y1 - c.y0 + 1;
+          return (
+            ch >= medH * 0.7 &&
+            ch <= medH * 1.4 &&
+            cw >= medW * 0.65 &&
+            cw <= medW * 1.5 &&
+            Math.abs((c.y0 + c.y1) / 2 - medCy) <= medH * 0.35
+          );
+        })
+        .sort((a, b) => a.x0 - b.x0);
+      if (row.length < 3) continue;
+
+      const pitches = [];
+      for (let i = 1; i < row.length; i++) pitches.push((row[i].x0 + row[i].x1 - row[i - 1].x0 - row[i - 1].x1) / 2);
+      const medPitch = median(pitches.filter((p) => p > 0));
+
+      let run = [];
+      let bestRun = [];
+      let prev = null;
+      for (const c of row) {
+        const center = (c.x0 + c.x1) / 2;
+        const pitch = prev ? center - (prev.x0 + prev.x1) / 2 : 0;
+        // Split off superscripts/units and unrelated blobs that do not share the digit pitch.
+        if (prev && (pitch < medPitch * 0.65 || pitch > medPitch * 1.3)) {
+          if (run.length > bestRun.length) bestRun = run;
+          run = [];
+        }
+        run.push(c);
+        prev = c;
+      }
+      if (run.length > bestRun.length) bestRun = run;
+      if (bestRun.length < 3 || bestRun.length > 9) continue;
+
+      const heights = bestRun.map((c) => c.y1 - c.y0 + 1);
+      const meanH = heights.reduce((a, b) => a + b, 0) / heights.length;
+      const deviation = Math.sqrt(heights.reduce((a, b) => a + (b - meanH) * (b - meanH), 0) / heights.length) || 1;
+      const topY = Math.min(...bestRun.map((c) => c.y0));
+      const bottomY = Math.max(...bestRun.map((c) => c.y1));
+      const runH = bottomY - topY + 1;
+
+      const rois = bestRun.map((c) => {
+        const cw = c.x1 - c.x0 + 1;
+        const x = Math.max(1, Math.round(c.x0 - cw * 0.12));
+        return {
+          x,
+          y: Math.max(1, Math.round(topY - runH * 0.08)),
+          dx: Math.round(cw * 1.4),
+          dy: Math.round(runH * 1.2),
+        };
+      });
+
+      const confidence = clamp((bestRun.length / 5) * (1 - deviation / meanH), 0, 1);
+      if (!best || confidence > best.confidence) best = { rois, confidence };
     }
     return best;
   }
 
-  // Split a band into digit boxes: equally spaced, aligned to the strongest ink phase.
-  function boxesFromBand(gray, edges, band) {
-    const { width: w } = gray;
-    const rowIn = edges.ex;
-    const top = band.top;
-    const bottom = band.bottom;
-    const height = bottom - top + 1;
-    const inBand = new Float32Array(w);
-
-    for (let x = 0; x < w; x++) {
-      let sum = 0;
-      for (let y = top; y <= bottom; y++) sum += rowIn[y * w + x];
-      inBand[x] = sum;
+  function digitBands(gray, row) {
+    const maxExpansion = Math.max(8, Math.round(gray.height * 0.02));
+    const bands = [];
+    for (const segment of rowSegments(row, gray.height)) {
+      const expansion = Math.min(maxExpansion, Math.round((segment.bottom - segment.top + 1) * 0.8));
+      bands.push({
+        top: Math.max(0, segment.top - expansion),
+        bottom: Math.min(gray.height - 1, segment.bottom + expansion),
+      });
     }
-
-    const period = bestPeriod(inBand);
-    if (!period.lag || period.score < 0.18) return null;
-
-    // Restrict the split to the horizontal extent of the band, not the full frame.
-    const colThreshold = Math.max(1, percentile(inBand, 0.9) * 0.1);
-    let xFirst = 0;
-    let xLast = w - 1;
-    while (xFirst < w - 1 && inBand[xFirst] < colThreshold) xFirst++;
-    while (xLast > xFirst && inBand[xLast] < colThreshold) xLast--;
-    if (xLast - xFirst + 1 < 3 * period.lag) return null;
-
-    const lag = period.lag;
-    const boxW = Math.max(4, Math.round(lag * 0.82));
-
-    let bestPhase = 0;
-    let bestScore = -Infinity;
-    for (let phase = 0; phase < lag; phase++) {
-      let inside = 0;
-      let gap = 0;
-      let count = 0;
-      for (let center = xFirst + phase + boxW / 2; center + boxW / 2 <= xLast; center += lag) {
-        const x0 = Math.round(center - boxW / 2);
-        const x1 = Math.round(center + boxW / 2);
-        for (let x = x0; x < x1; x++) inside += inBand[x] || 0;
-        const gx0 = x1;
-        const gx1 = Math.min(xLast, Math.round(center + lag - boxW / 2));
-        for (let x = gx0; x < gx1; x++) gap += inBand[x] || 0;
-        count++;
-      }
-      const score = count ? inside / count - gap / Math.max(1, count * (lag - boxW)) : -Infinity;
-      if (score > bestScore) {
-        bestScore = score;
-        bestPhase = phase;
-      }
-    }
-
-    const rois = [];
-    for (let center = xFirst + bestPhase + boxW / 2; center + boxW / 2 <= xLast; center += lag) {
-      const x = Math.round(center - boxW / 2);
-      if (x < 1) continue;
-      rois.push({ x, y: top, dx: boxW, dy: height });
-    }
-
-    if (rois.length < 3 || rois.length > 9) return null;
-
-    const margin = Math.max(1, Math.round(height * 0.08));
-    for (const roi of rois) {
-      roi.y = Math.max(1, roi.y - margin);
-      roi.dy = Math.min(gray.height - roi.y - 1, roi.dy + 2 * margin);
-      roi.x = Math.max(1, roi.x - 1);
-      roi.dx = Math.min(gray.width - roi.x - 1, roi.dx + 2);
-    }
-
-    return { rois, confidence: clamp(period.score, 0, 1), period: lag };
+    return bands;
   }
 
   function detectDigitRois(image) {
     const gray = toGray(image, 600);
     const edges = horizontalEdges(gray);
     const row = smooth1d(edges.row, 2);
-    const segments = rowSegments(row, gray.height);
 
     let best = null;
-    for (const band of segments) {
-      // Vertical extent of the band, refined on the smoothed row profile.
-      const inner = [];
-      for (let y = band.top; y <= band.bottom; y++) inner.push(edges.row[y]);
-      const bandThreshold = Math.max(1, median(inner) * 0.7);
-      let top = band.top;
-      let bottom = band.bottom;
-      while (top < bottom && row[top] < bandThreshold) top++;
-      while (bottom > top && row[bottom] < bandThreshold) bottom--;
-      if (bottom - top + 1 < 8) continue;
-
-      const result = boxesFromBand(gray, edges, { top, bottom });
+    for (const band of digitBands(gray, row)) {
+      const result = digitBoxesInBand(gray, band.top, band.bottom);
       if (result && (!best || result.confidence > best.confidence)) best = result;
     }
 
@@ -233,7 +278,7 @@
     const gray = toGray(image, 320);
     const edges = horizontalEdges(gray);
     const row = smooth1d(edges.row, 2);
-    const bandResult = detectDigitBoxesInGray(gray, edges, row);
+    const bandResult = detectDigitBand(gray, row);
     if (!bandResult) return { angle: 0, score: 0 };
 
     const { width: w, height: h, data } = gray;
@@ -319,12 +364,11 @@
     return metric;
   }
 
-  // Band used by the skew estimator (top/bottom only, no ROI split).
-  function detectDigitBoxesInGray(gray, edges, row) {
-    const segments = rowSegments(row, gray.height);
+  // Band used by the skew estimator: the one where the digit row was found.
+  function detectDigitBand(gray, row) {
     let best = null;
-    for (const band of segments) {
-      const result = boxesFromBand(gray, edges, band);
+    for (const band of digitBands(gray, row)) {
+      const result = digitBoxesInBand(gray, band.top, band.bottom);
       if (result && (!best || result.confidence > best.confidence)) best = { ...band, confidence: result.confidence };
     }
     return best;
@@ -348,7 +392,103 @@
     return { gx, gy, mag };
   }
 
+  // Some meters mark the analog dials with a coloured pointer. Those blobs are
+  // far easier to find than the faint printed dial rims, so use them when present.
+  function detectPointerBlobs(image) {
+    const scale = Math.min(1, 500 / Math.max(image.width, image.height));
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    const data = image.data;
+    const mask = new Uint8Array(width * height);
+
+    for (let y = 0; y < height; y++) {
+      const sy = Math.min(image.height - 1, Math.floor(y / scale));
+      for (let x = 0; x < width; x++) {
+        const sx = Math.min(image.width - 1, Math.floor(x / scale));
+        const i = (sy * image.width + sx) * 4;
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        if (r > 110 && r - g > 35 && r - b > 35) mask[y * width + x] = 1;
+      }
+    }
+
+    const minArea = Math.max(30, width * height * 0.00025);
+    const maxSide = Math.min(width, height) * 0.25;
+    const blobsFound = [];
+    const stack = [];
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const start = y * width + x;
+        if (!mask[start]) continue;
+        let x0 = x;
+        let x1 = x;
+        let y0 = y;
+        let y1 = y;
+        let area = 0;
+        let sumX = 0;
+        let sumY = 0;
+        stack.push(start);
+        mask[start] = 0;
+        while (stack.length) {
+          const p = stack.pop();
+          const px = p % width;
+          const py = (p / width) | 0;
+          area++;
+          sumX += px;
+          sumY += py;
+          if (px < x0) x0 = px;
+          if (px > x1) x1 = px;
+          if (py < y0) y0 = py;
+          if (py > y1) y1 = py;
+          for (let dy = -1; dy <= 1; dy++) {
+            const ny = py + dy;
+            if (ny < 0 || ny >= height) continue;
+            for (let dx = -1; dx <= 1; dx++) {
+              const nx = px + dx;
+              if (nx < 0 || nx >= width) continue;
+              const q = ny * width + nx;
+              if (mask[q]) {
+                mask[q] = 0;
+                stack.push(q);
+              }
+            }
+          }
+        }
+        const bw = x1 - x0 + 1;
+        const bh = y1 - y0 + 1;
+        if (area < minArea || bw > maxSide || bh > maxSide) continue;
+        if (bw / bh < 0.25 || bw / bh > 4) continue;
+        blobsFound.push({ cx: sumX / area, cy: sumY / area, bw, bh, area });
+      }
+    }
+
+    if (blobsFound.length < 2) return { rois: [], confidence: 0 };
+    const pointerSizes = blobsFound.map((b) => Math.max(b.bw, b.bh) * 1.9);
+    const side = Math.round(clamp(median(pointerSizes), 30, Math.min(width, height) * 0.5));
+    const rois = blobsFound
+      .sort((a, b) => a.cx - b.cx)
+      .slice(0, 6)
+      .map((b) => {
+        const x = Math.max(1, Math.round((b.cx - side / 2) * (image.width / width)));
+        const y = Math.max(1, Math.round((b.cy - side / 2) * (image.height / height)));
+        const s = Math.round(side * (image.width / width));
+        return { x, y, dx: s, dy: s };
+      });
+
+    return { rois, confidence: clamp(0.45 + 0.15 * rois.length, 0, 0.95) };
+  }
+
   function detectAnalogRois(image) {
+    const pointer = detectPointerBlobs(image);
+    const circles = detectAnalogCircles(image);
+    if (pointer.rois.length >= 2 && pointer.confidence >= circles.confidence) return pointer;
+    if (circles.rois.length) return circles;
+    return pointer;
+  }
+
+  function detectAnalogCircles(image) {
+
     const gray = toGray(image, 500);
     const { width: w, height: h } = gray;
     const { gx, gy, mag } = edgeMap(gray);
