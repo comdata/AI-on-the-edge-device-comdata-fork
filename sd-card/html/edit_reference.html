@@ -1039,10 +1039,11 @@
 
       const loader = document.getElementById('img_loading');
       if (loader) loader.src = loaderSpinner;
-      showReference();
 
       try {
+        // Config first: showReference() reads it from the session storage cache.
         await loadConfig();
+        showReference();
         await loadConfigData();
       } catch (err) {
         firework.launch('Failed to load config. Retry or check logs', 'danger', 3000);
