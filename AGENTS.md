@@ -230,6 +230,13 @@ A broken `services.yaml` does not break the integration: Home Assistant only log
 `ha core logs -n 3000 | grep services.yaml` after deploying one. A number selector's
 `step` must be at least `0.001`.
 
+There is no HA API token in the sandbox, so entity states are not reachable. To prove the
+integration really polls, append a `logger: logs: custom_components.ai_on_the_edge: debug`
+block to `/config/configuration.yaml` (back it up first), `ha core restart`, wait ~140 s and
+grep `ha core logs` for `Finished fetching … (success: True)`; then restore the backup and
+restart again, otherwise HA keeps the debug level. The SSH call needs a timeout above 200 s
+or it dies mid-restart and leaves the block in place.
+
 Consumers that must follow the reading entity: the `utility_meter` helper "Wasser pro Tag"
 (`sensor.wasserzaehler_wasser_pro_tag`), the Energy dashboard's water source
 (`ha_manage_energy_prefs`), and the NSPanel blueprints (`automation.panelbad`,
