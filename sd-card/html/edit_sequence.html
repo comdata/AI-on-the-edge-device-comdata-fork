@@ -197,7 +197,12 @@
       </div>
 
       <div class="card">
-        <div class="card-header"><span>Region Of Interest (ROI)</span></div>
+        <div class="card-header">
+          <span>Region Of Interest (ROI)</span>
+          <div class="header-actions">
+            <input class="button btn-action" type="button" id="autodetect" value="Auto-Detect ROIs" onclick="autoDetectRois(true)" />
+          </div>
+        </div>
         <div class="card-body" style="padding: 10px">
           <div class="control-group">
             <div id="div_input_el" hidden>
@@ -329,6 +334,7 @@
     </div>
   </div>
 
+  <script src="autoRoi.js?v=$COMMIT_HASH"></script>
   <script src="global.js?v=$COMMIT_HASH"></script>
   <script>
     let canvas = document.getElementById('canvas');
@@ -1466,6 +1472,118 @@
       loadCanvas(getDomainname() + '/fileserver/config/reference.jpg?' + Math.floor(Math.random() * 1000000 + 1));
     }
 
+    // --- Automatic ROI proposal on the saved reference image ------------------
+    function referencePixels() {
+      const maxSide = 1000;
+      const imageWidth = imageObj.naturalWidth;
+      const imageHeight = imageObj.naturalHeight;
+      const scale = Math.min(1, maxSide / Math.max(imageWidth, imageHeight));
+      const width = Math.max(1, Math.round(imageWidth * scale));
+      const height = Math.max(1, Math.round(imageHeight * scale));
+      const canvasTmp = document.createElement('canvas');
+      canvasTmp.width = width;
+      canvasTmp.height = height;
+      const ctxTmp = canvasTmp.getContext('2d', { willReadFrequently: true });
+      ctxTmp.drawImage(imageObj, 0, 0, width, height);
+      return { data: ctxTmp.getImageData(0, 0, width, height), factor: imageWidth / width };
+    }
+
+    function scaleRoi(roi, factor) {
+      return {
+        x: Math.max(1, Math.round(roi.x * factor)),
+        y: Math.max(1, Math.round(roi.y * factor)),
+        dx: Math.max(1, Math.round(roi.dx * factor)),
+        dy: Math.max(1, Math.round(roi.dy * factor)),
+      };
+    }
+
+    function setSequenceRois(type, idx, rois) {
+      const sequence = jsonConfigModifiedDelta[type] && jsonConfigModifiedDelta[type].sequence[idx];
+      if (!sequence) return;
+      sequence.roi = rois.map((roi) =>
+        type === 'analog'
+          ? { x: roi.x, y: roi.y, dx: roi.dx, dy: roi.dy, ccw: false, ar: roi.dx / roi.dy }
+          : { x: roi.x, y: roi.y, dx: roi.dx, dy: roi.dy, ar: roi.dx / roi.dy },
+      );
+    }
+
+    function currentSequenceRoiCount() {
+      const idx = sequenceSelection.selectedIndex;
+      const digit = jsonConfigModifiedDelta.digit.sequence[idx];
+      const analog = jsonConfigModifiedDelta.analog.sequence[idx];
+      return (digit ? digit.roi.length : 0) + (analog ? analog.roi.length : 0);
+    }
+
+    let autoDetectBusy = false;
+
+    async function autoDetectRois(interactive) {
+      if (autoDetectBusy) return;
+      if (!imageObj.complete || !imageObj.naturalWidth) {
+        if (interactive) firework.launch('Reference image not loaded yet. Complete the reference step first.', 'warning', 5000);
+        return;
+      }
+
+      autoDetectBusy = true;
+      const btn = document.getElementById('autodetect');
+      if (btn) btn.disabled = true;
+
+      try {
+        const pixels = referencePixels();
+        const digitResult = window.AutoRoi.detectDigitRois(pixels.data);
+        const analogResult = window.AutoRoi.detectAnalogRois(pixels.data);
+        const threshold = window.AutoRoi.threshold;
+        const digits = digitResult.confidence >= threshold ? digitResult.rois.map((r) => scaleRoi(r, pixels.factor)) : [];
+        const analogs = analogResult.confidence >= threshold ? analogResult.rois.map((r) => scaleRoi(r, pixels.factor)) : [];
+
+        if (!digits.length && !analogs.length) {
+          firework.launch('No reliable digit or analog ROI found. Please set the ROIs manually or improve the reference image.', 'warning', 8000);
+          return;
+        }
+        if (interactive && currentSequenceRoiCount() > 0 && !confirm('Replace the ROIs of the selected sequence with the detected ones?')) return;
+
+        const idx = sequenceSelection.selectedIndex;
+        // Only replace the ROI type that was actually found; keep the other one.
+        if (digits.length) setSequenceRois('digit', idx, digits);
+        if (analogs.length) setSequenceRois('analog', idx, analogs);
+
+        if (digits.length) {
+          document.getElementById('digitProcessing').checked = true;
+          digitProcessingChanged();
+        }
+        if (analogs.length) {
+          document.getElementById('analogProcessing').checked = true;
+          analogProcessingChanged();
+        }
+
+        roiSelected = 0;
+        RefreshROI();
+        parseROIArrangement();
+        RefreshDraw();
+        document.getElementById('saveconfig').disabled = false;
+        firework.launch(
+          `Detected ${digits.length} digit ROI(s) and ${analogs.length} analog ROI(s). Check the boxes, then Save And Apply.`,
+          'success',
+          10000,
+        );
+      } catch (error) {
+        console.error('Auto-detection failed:', error);
+        if (interactive) firework.launch(`Auto-detection failed: ${error.message || error}`, 'danger', 8000);
+      } finally {
+        autoDetectBusy = false;
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function maybeAutoDetectRois() {
+      if (!new URLSearchParams(window.location.search).has('autosearch')) return;
+      for (let i = 0; i < 100; i++) {
+        if (imageObj.complete && imageObj.naturalWidth) break;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      if (!imageObj.complete || !imageObj.naturalWidth) return;
+      if (currentSequenceRoiCount() === 0) await autoDetectRois(false);
+    }
+
     function loadConfigData() {
       jsonConfig = getConfigFromStorage(); // Get config
       jsonConfigModifiedDelta = {}; // Reset modified parameter container
@@ -1498,6 +1616,8 @@
         firework.launch('Failed to load config. Retry or check logs', 'danger', 5000);
         console.error('Initialization failed:', error);
       }
+
+      await maybeAutoDetectRois();
     }
 
     window.addEventListener('DOMContentLoaded', () => {

@@ -141,11 +141,13 @@
         <div class="card-header">
           <span>Reference Image</span>
           <div class="header-actions">
+            <input id="autoadjust" class="button btn-action" type="button" value="Auto-Adjust & Save" onclick="autoAdjust()" />
             <input id="createreference" class="button" type="button" value="Create New Image" onclick="loadRawImage()" />
             <input id="showactualimage" class="button" type="button" value="Show Actual Image" onclick="showReference()" disabled />
           </div>
         </div>
         <div class="card-body">
+          <div id="autoStatus" class="info-box" style="display: none; margin: 0 0 10px 0"></div>
           <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 480px; width: 100%">
             <img id="img_loading" alt="Loading..." />
             <canvas id="canvas" hidden></canvas>
@@ -466,6 +468,7 @@
     </div>
   </div>
 
+  <script src="autoRoi.js?v=$COMMIT_HASH"></script>
   <script src="global.js?v=$COMMIT_HASH"></script>
   <script>
     let canvas = document.getElementById('canvas');
@@ -747,6 +750,233 @@
       }
       finally {
         saveBtn.disabled = false;
+      }
+    }
+
+    // --- Automatic camera, rotation and reference setup -----------------------
+    // Takes single-shot test pictures through /camera (temporary parameters, no
+    // config write), picks the best exposed one, derives the skew of the digit
+    // row and only then saves reference and configuration.
+
+    function readTakeParams() {
+      const getVal = (id, def) => {
+        const el = document.getElementById(id);
+        return el && el.value !== '' ? el.value : def;
+      };
+      return {
+        task: 'capture',
+        flashtime: getVal('takeimage_flashlight_flashtime_value', '2000'),
+        flashintensity: getVal('takeimage_flashlight_flashintensity_value', '50'),
+        brightness: getVal('takeimage_camera_brightness_value', '0'),
+        contrast: getVal('takeimage_camera_contrast_value', '0'),
+        saturation: getVal('takeimage_camera_saturation_value', '0'),
+        sharpness: getVal('takeimage_camera_sharpness_value', '0'),
+        exposurecontrolmode: getVal('takeimage_camera_exposurecontrolmode_value', '1'),
+        autoexposurelevel: getVal('takeimage_camera_autoexposurelevel_value', '0'),
+        manualexposurevalue: getVal('takeimage_camera_manualexposurevalue_value', '300'),
+        gaincontrolmode: getVal('takeimage_camera_gaincontrolmode_value', '1'),
+        manualgainvalue: getVal('takeimage_camera_manualgainvalue_value', '0'),
+        specialeffect: getVal('takeimage_camera_specialeffect_value', '0'),
+        mirror: getVal('takeimage_camera_mirrorimage_value', 'false'),
+        flip: getVal('takeimage_camera_flipimage_value', 'false'),
+        zoomfactor: getVal('takeimage_camera_zoomfactor_value', '1000'),
+        zoomx: getVal('takeimage_camera_zoomoffsetx_value', '0'),
+        zoomy: getVal('takeimage_camera_zoomoffsety_value', '0'),
+      };
+    }
+
+    function uniqueNumbers(values) {
+      return [...new Set(values.filter((v) => Number.isFinite(v)))];
+    }
+
+    async function blobToBitmap(blob) {
+      if (typeof createImageBitmap === 'function') return createImageBitmap(blob);
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = URL.createObjectURL(blob);
+      });
+    }
+
+    async function captureForAuto(overrides) {
+      const params = { ...readTakeParams(), ...overrides };
+      const flashTime = parseInt(params.flashtime, 10) || 2000;
+      const res = await apiCall(`/camera?${new URLSearchParams(params)}`, { timeout: Math.max(flashTime + 10000, 15000) }, { parseType: 'blob' });
+      if (!res.ok) throw new Error(`Test capture failed (${res.status || res.error})`);
+      const bitmap = await blobToBitmap(res.data);
+      return { blob: res.data, bitmap, params };
+    }
+
+    // Higher is better: broad usable range, no burned-out or black areas.
+    function scoreImage(bitmap) {
+      const scale = Math.min(1, 320 / Math.max(bitmap.width, bitmap.height));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      const canvasTmp = document.createElement('canvas');
+      canvasTmp.width = width;
+      canvasTmp.height = height;
+      const ctxTmp = canvasTmp.getContext('2d', { willReadFrequently: true });
+      ctxTmp.drawImage(bitmap, 0, 0, width, height);
+
+      const x0 = Math.floor(width * 0.15);
+      const x1 = Math.ceil(width * 0.85);
+      const y0 = Math.floor(height * 0.15);
+      const y1 = Math.ceil(height * 0.85);
+      const pixels = ctxTmp.getImageData(x0, y0, x1 - x0, y1 - y0).data;
+      const hist = new Uint32Array(256);
+      let total = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        hist[(pixels[i] * 77 + pixels[i + 1] * 150 + pixels[i + 2] * 29) >> 8]++;
+        total++;
+      }
+
+      const percentile = (p) => {
+        let acc = 0;
+        const target = total * p;
+        for (let i = 0; i < 256; i++) {
+          acc += hist[i];
+          if (acc >= target) return i;
+        }
+        return 255;
+      };
+      let clipped = 0;
+      for (let i = 0; i <= 5; i++) clipped += hist[i];
+      for (let i = 250; i < 256; i++) clipped += hist[i];
+
+      return percentile(0.98) - percentile(0.02) - 300 * (clipped / total);
+    }
+
+    async function imageDataFromBlob(blob) {
+      const bitmap = await blobToBitmap(blob);
+      const scale = Math.min(1, 800 / Math.max(bitmap.width, bitmap.height));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      const canvasTmp = document.createElement('canvas');
+      canvasTmp.width = width;
+      canvasTmp.height = height;
+      const ctxTmp = canvasTmp.getContext('2d', { willReadFrequently: true });
+      ctxTmp.drawImage(bitmap, 0, 0, width, height);
+      const data = ctxTmp.getImageData(0, 0, width, height);
+      if (bitmap.close) bitmap.close();
+      return data;
+    }
+
+    function setAutoField(id, value) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.value = value;
+      const output = el.previousElementSibling;
+      if (output && output.tagName === 'OUTPUT') output.value = value;
+    }
+
+    async function waitForCapturedImage() {
+      for (let i = 0; i < 200; i++) {
+        if (imageObj.complete && imageObj.naturalWidth > 0) return;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Captured image did not load');
+    }
+
+    async function autoAdjust() {
+      if (
+        !confirm(
+          'Auto-Adjust takes several test pictures, sets exposure/flash and image rotation, and replaces the current reference image. Continue?',
+        )
+      )
+        return;
+
+      const btn = document.getElementById('autoadjust');
+      const status = document.getElementById('autoStatus');
+      btn.disabled = true;
+      status.style.display = 'block';
+
+      try {
+        const base = readTakeParams();
+        const exposureMode = parseInt(base.exposurecontrolmode, 10);
+        const baseFlash = parseInt(base.flashintensity, 10) || 50;
+        const baseAe = parseInt(base.autoexposurelevel, 10) || 0;
+        const baseManual = parseInt(base.manualexposurevalue, 10) || 300;
+
+        const shots = [{ overrides: {}, label: 'current setting' }];
+        if (exposureMode === 0) {
+          for (const value of uniqueNumbers([Math.round(baseManual * 0.6), Math.round(baseManual * 1.6)]))
+            shots.push({ overrides: { manualexposurevalue: String(value) }, label: `exposure ${value}` });
+        } else {
+          for (const value of uniqueNumbers([30, 50, 70]).filter((v) => v !== baseFlash))
+            shots.push({ overrides: { flashintensity: String(value) }, label: `flash ${value}%` });
+        }
+
+        let best = null;
+        let index = 0;
+        const totalShots = shots.length + (exposureMode === 0 ? 0 : 3);
+
+        for (const shot of shots) {
+          index++;
+          status.textContent = `Auto-Adjust: test picture ${index}/${totalShots} (${shot.label}) ...`;
+          const capture = await captureForAuto(shot.overrides);
+          const score = scoreImage(capture.bitmap);
+          if (capture.bitmap.close) capture.bitmap.close();
+          if (!best || score > best.score) best = { score, ...capture };
+        }
+
+        if (exposureMode !== 0) {
+          const bestFlash = parseInt(best.params.flashintensity, 10) || baseFlash;
+          for (const level of uniqueNumbers([baseAe - 1, baseAe + 1])) {
+            if (level < -2 || level > 5) continue;
+            index++;
+            status.textContent = `Auto-Adjust: test picture ${index}/${totalShots} (exposure level ${level}) ...`;
+            const capture = await captureForAuto({ flashintensity: String(bestFlash), autoexposurelevel: String(level) });
+            const score = scoreImage(capture.bitmap);
+            if (capture.bitmap.close) capture.bitmap.close();
+            if (score > best.score) best = { score, ...capture };
+          }
+        }
+
+        setAutoField('takeimage_flashlight_flashintensity_value', best.params.flashintensity);
+        setAutoField('takeimage_camera_autoexposurelevel_value', best.params.autoexposurelevel);
+        setAutoField('takeimage_camera_manualexposurevalue_value', best.params.manualexposurevalue);
+
+        status.textContent = 'Auto-Adjust: estimating image rotation ...';
+        const pixels = await imageDataFromBlob(best.blob);
+        const skew = window.AutoRoi.estimateSkew(pixels);
+        setAutoField('imagealignment_imagerotation_value', skew.angle.toFixed(1));
+
+        jsonConfigModifiedDelta = {};
+        gatherChangedParameter(document.getElementById('takeimage_flashlight_flashintensity_form'), true);
+        gatherChangedParameter(document.getElementById('takeimage_camera_autoexposurelevel_form'), true);
+        gatherChangedParameter(document.getElementById('takeimage_camera_manualexposurevalue_form'), true);
+        gatherChangedParameter(document.getElementById('imagealignment_imagerotation_form'), false);
+        jsonConfigModifiedDelta.imagealignment = jsonConfigModifiedDelta.imagealignment || {};
+        jsonConfigModifiedDelta.imagealignment.alignmentalgo = 3;
+
+        status.textContent = 'Auto-Adjust: saving reference image ...';
+        specialeffect = best.params.specialeffect;
+        if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+        currentBlobUrl = URL.createObjectURL(best.blob);
+        loadCanvas(currentBlobUrl, true);
+        await waitForCapturedImage();
+        drawRotated(false);
+
+        if (!(await saveCanvasToFile(canvas, '/config/reference.jpg'))) throw new Error('Reference image upload failed');
+        await saveConfig(JSON.stringify(jsonConfigModifiedDelta), true);
+
+        isActReference = false;
+        document.getElementById('showactualimage').disabled = false;
+        document.getElementById('createreference').disabled = true;
+        document.getElementById('savereference').disabled = true;
+        firework.launch(
+          `Auto-Adjust done: flash ${best.params.flashintensity}%, rotation ${skew.angle.toFixed(1)}°. Reference image saved.`,
+          'success',
+          8000,
+        );
+        showReference();
+      } catch (error) {
+        console.error('Auto-Adjust failed:', error);
+        firework.launch(`Auto-Adjust failed: ${error.message || error}`, 'danger', 10000);
+      } finally {
+        btn.disabled = false;
+        status.style.display = 'none';
       }
     }
 

@@ -459,6 +459,10 @@
             Note 1: Any pending image refresh is blocking saving or step change.<br>
             Note 2: Camera parametrization and flashlight fine-tuning is performed in next step.
           </p>
+          <p>
+            The next step can adjust exposure, flashlight and image rotation automatically and save the reference. Frame the meter with
+            Zoom Factor first, so the counter fills the picture.
+          </p>
         </div>
 
         <!-- CARD: Flashlight Setup -->
@@ -697,12 +701,24 @@
 
       <!-- STEP 3: Alignment Marker Configuration -->
       <div id="desc-step3" class="steps step-content" style="display: none">
-        <div><strong>Step 3: Alignment Marker Configuration</strong></div>
+        <div>
+          <strong>Step 3: Alignment Marker Configuration</strong>
+          <p>
+            Optional: the previous step already enabled rotation only alignment and set the image rotation. Alignment markers are only
+            needed if small position shifts between pictures must also be corrected. Skip this step otherwise.
+          </p>
+        </div>
       </div>
 
       <!-- STEP 4: Number Sequences Configuration -->
       <div id="desc-step4" class="steps step-content" style="display: none">
-        <div><strong>Step 4: Number Sequences And ROIs Configuration</strong></div>
+        <div>
+          <strong>Step 4: Number Sequences And ROIs Configuration</strong>
+          <p>
+            The digit and analog boxes are searched automatically on the saved reference image when the page opens. Review the proposals,
+            adjust them if needed, then press Save And Apply. Use Auto-Detect ROIs to search again.
+          </p>
+        </div>
       </div>
 
       <!-- STEP 5: Finalization -->
@@ -877,7 +893,7 @@
             this.loadIframe('edit_alignment.html');
             break;
           case 4:
-            this.loadIframe('edit_sequence.html');
+            this.loadIframe('edit_sequence.html?autosearch=1');
             break;
         }
         this.loadRSSI();
@@ -885,7 +901,8 @@
       loadIframe(url) {
         UI.main.classList.remove('ready');
         this.el.mainContent.style.display = 'block';
-        this.el.mainContent.src = `${url}?v=$COMMIT_HASH#description`;
+        const separator = url.includes('?') ? '&' : '?';
+        this.el.mainContent.src = `${url}${separator}v=$COMMIT_HASH#description`;
       },
       // Data & Completion Logic
       syncConfigToUI() {

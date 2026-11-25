@@ -691,5 +691,13 @@ window.I18N_DICT = {
   "Weak": "Schwach",
   "Unreliable": "Unzuverlässig",
   "Offline": "Offline",
-  "Disconnected": "Getrennt"
+  "Disconnected": "Getrennt",
+  "Auto-Adjust & Save": "Automatisch einstellen & speichern",
+  "Auto-Detect ROIs": "ROIs automatisch suchen",
+  "Auto-Adjust takes several test pictures, sets exposure/flash and image rotation, and replaces the current reference image. Continue?": "Auto-Adjust nimmt mehrere Testbilder auf, setzt Belichtung/Blitz und Bilddrehung und ersetzt das aktuelle Referenzbild. Fortfahren?",
+  "The next step can adjust exposure, flashlight and image rotation automatically and save the reference. Frame the meter with Zoom Factor first, so the counter fills the picture.": "Der nächste Schritt kann Belichtung, Blitz und Bilddrehung automatisch einstellen und das Referenzbild speichern. Zoomen Sie den Zähler vorher mit dem Zoom-Faktor heran, damit er das Bild ausfüllt.",
+  "Optional: the previous step already enabled rotation only alignment and set the image rotation. Alignment markers are only needed if small position shifts between pictures must also be corrected. Skip this step otherwise.": "Optional: Der vorherige Schritt hat bereits die reine Drehungsausrichtung aktiviert und die Bilddrehung gesetzt. Marker sind nur nötig, wenn zusätzlich kleine Positionsverschiebungen zwischen den Bildern korrigiert werden sollen. Sonst diesen Schritt überspringen.",
+  "The digit and analog boxes are searched automatically on the saved reference image when the page opens. Review the proposals, adjust them if needed, then press Save And Apply. Use Auto-Detect ROIs to search again.": "Die Ziffern- und Analog-Kästen werden beim Öffnen automatisch im gespeicherten Referenzbild gesucht. Prüfen Sie die Vorschläge, passen Sie sie bei Bedarf an und drücken Sie dann Speichern und anwenden. Mit ROIs automatisch suchen starten Sie die Suche erneut.",
+  "Replace the ROIs of the selected sequence with the detected ones?": "Die ROIs der gewählten Sequenz durch die gefundenen ersetzen?",
+  "Reference image not loaded yet. Complete the reference step first.": "Referenzbild noch nicht geladen. Schließen Sie zuerst den Referenzschritt ab.",
 };
