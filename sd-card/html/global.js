@@ -651,6 +651,7 @@ function setLanguage(lang) {
   document.cookie = `lang=${lang};path=/;max-age=${60 * 60 * 24 * 400};SameSite=Lax`;
   // Switch in place: a reload would drop the login session of the page's frames
   i18nLoad(lang, () => {
+    i18nLanguage = lang;
     document.documentElement.lang = lang;
     i18nStart();
     const select = document.getElementById('langSelect');
@@ -662,7 +663,9 @@ function setLanguage(lang) {
 }
 
 const i18nKey = (text) => text.replace(/\s+/g, ' ').trim();
-const i18nLookup = (text) => window.I18N_DICT && window.I18N_DICT[i18nKey(text)];
+// Only the active language's dictionary is loaded; 'en' means "show the sources"
+let i18nLanguage = 'en';
+const i18nLookup = (text) => i18nLanguage !== 'en' && window.I18N_DICT && window.I18N_DICT[i18nKey(text)];
 
 function i18nTextNode(node) {
   // Keep the English source so switching back needs no reload
@@ -692,14 +695,16 @@ function i18nApply(root) {
 }
 
 let i18nTitleSource = null;
+let i18nTitleApplied = null;
 
 function i18nTitleApply() {
-  const translated = i18nLookup(i18nTitleSource || '');
-  if (i18nTitleSource === null || (document.title !== i18nTitleSource && document.title !== translated)) {
+  // A title the app sets itself (e.g. "host | device") becomes the new source
+  if (i18nTitleSource !== null && document.title !== i18nTitleSource && document.title !== i18nTitleApplied) {
     i18nTitleSource = document.title;
   }
-  const next = i18nLookup(i18nTitleSource) || i18nTitleSource;
-  if (document.title !== next) document.title = next;
+  if (i18nTitleSource === null) i18nTitleSource = document.title;
+  i18nTitleApplied = i18nLookup(i18nTitleSource) || i18nTitleSource;
+  if (document.title !== i18nTitleApplied) document.title = i18nTitleApplied;
 }
 
 let i18nStarted = false;
@@ -731,6 +736,7 @@ function i18nStart() {
 
 (function i18nInit() {
   const lang = getLanguage();
+  i18nLanguage = lang;
   document.documentElement.lang = lang;
   if (lang === 'en') return;
 
