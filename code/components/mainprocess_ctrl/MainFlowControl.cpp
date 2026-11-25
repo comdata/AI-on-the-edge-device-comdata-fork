@@ -1312,27 +1312,27 @@ void registerMainFlowTaskUri(httpd_handle_t server)
     camuri.method = HTTP_GET;
 
     camuri.uri = "/cycle_start";
-    camuri.handler = HTTP_AUTH_BASIC(handler_cycle_start);
+    camuri.handler = HTTP_AUTH(handler_cycle_start);
     camuri.user_ctx = NULL;
     httpd_register_uri_handler(server, &camuri);
 
     camuri.uri = "/set_fallbackvalue";
-    camuri.handler = HTTP_AUTH_BASIC(handler_fallbackvalue);
+    camuri.handler = HTTP_AUTH(handler_fallbackvalue);
     camuri.user_ctx = NULL;
     httpd_register_uri_handler(server, &camuri);
 
     camuri.uri = "/editflow";
-    camuri.handler = HTTP_AUTH_BASIC(handler_editflow);
+    camuri.handler = HTTP_AUTH(handler_editflow);
     camuri.user_ctx = NULL;
     httpd_register_uri_handler(server, &camuri);
 
     camuri.uri = "/process_data";
-    camuri.handler = HTTP_AUTH_BASIC(handler_process_data);
+    camuri.handler = HTTP_AUTH(handler_process_data);
     camuri.user_ctx = httpServerData; // Pass server data as context
     httpd_register_uri_handler(server, &camuri);
 
     camuri.uri = "/recognition_details";
-    camuri.handler = HTTP_AUTH_BASIC(handler_recognition_details);
+    camuri.handler = HTTP_AUTH(handler_recognition_details);
     camuri.user_ctx = NULL;
     httpd_register_uri_handler(server, &camuri);
 }

@@ -899,7 +899,7 @@ void GpioHandler::registerGpioUri(httpd_handle_t server)
     camuri.method = HTTP_GET;
 
     camuri.uri = "/gpio";
-    camuri.handler = HTTP_AUTH_BASIC(callHandleHttpRequest);
+    camuri.handler = HTTP_AUTH(callHandleHttpRequest);
     camuri.user_ctx = (void *)this;
     httpd_register_uri_handler(server, &camuri);
 }

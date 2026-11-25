@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en" xml:lang="en">
+
+<head>
+  <title>AI-on-the-Edge Device · Login</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <script>
+    // Theme Control (same source of truth as the WebUI)
+    (function () {
+      let theme;
+      try { theme = localStorage.getItem('theme'); } catch (e) { }
+      if (theme !== 'light' && theme !== 'dark') {
+        try { theme = document.cookie.match(/(?:^|; )theme=(light|dark)/)?.[1]; } catch (e) { }
+        if (!theme) theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.classList.add(theme);
+    })();
+  </script>
+
+  <!-- Self-contained on purpose: style.css and global.js are protected by the same login -->
+  <style>
+    :root,
+    :root.light {
+      color-scheme: light;
+      --bg: #ffffff;
+      --surface-light: #ffffff;
+      --bg-light: #e2e8f0;
+      --border: #cbd5e1;
+      --text-main: #1b1f23;
+      --text-secondary: #64748b;
+      --primary: #0366d6;
+      --error: #ef4444;
+      --shadow: 0 4px 12px rgba(20, 30, 50, 0.3);
+    }
+
+    :root.dark {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --surface-light: #1f2937;
+      --bg-light: #1e293b;
+      --border: rgba(51, 65, 85, 0.31);
+      --text-main: #f9fafb;
+      --text-secondary: #9ca3af;
+      --primary: #0366d6;
+      --error: #ef4444;
+      --shadow: 0 4px 12px rgba(70, 70, 70, 0.3);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      background: var(--bg-light);
+      color: var(--text-main);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 14px;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 360px;
+      padding: 28px 26px 24px;
+      border: 1px solid var(--border);
+      border-radius: 0.9rem;
+      background: var(--surface-light);
+      box-shadow: var(--shadow);
+    }
+
+    h1 {
+      margin: 0 0 4px;
+      font-size: 1.25em;
+    }
+
+    .subtitle {
+      margin: 0 0 20px;
+      color: var(--text-secondary);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--text-secondary);
+    }
+
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      margin-bottom: 16px;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 0.3rem;
+      background: var(--bg);
+      color: var(--text-main);
+      font-size: 1em;
+    }
+
+    input:focus {
+      outline: 2px solid var(--primary);
+      outline-offset: 1px;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      border: 0;
+      border-radius: 0.3rem;
+      background: var(--primary);
+      color: #fff;
+      font-size: 1em;
+      cursor: pointer;
+    }
+
+    button:hover { filter: brightness(1.08); }
+
+    .error {
+      display: none;
+      margin: 0 0 16px;
+      padding: 8px 10px;
+      border-left: 3px solid var(--error);
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--error);
+    }
+
+    .error.visible { display: block; }
+
+    .hint {
+      margin: 16px 0 0;
+      color: var(--text-secondary);
+      font-size: 0.9em;
+    }
+
+    .lang {
+      margin-top: 16px;
+      text-align: right;
+    }
+
+    .lang button {
+      width: auto;
+      padding: 4px 8px;
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 0.3rem;
+      font-size: 0.85em;
+    }
+  </style>
+</head>
+
+<body>
+  <main class="card">
+    <h1>AI-on-the-Edge Device</h1>
+    <p class="subtitle" data-i18n="subtitle">Sign in to continue</p>
+    <p class="error" id="error" role="alert" data-i18n="error">Wrong username or password.</p>
+
+    <form method="post" action="/login" autocomplete="on">
+      <input type="hidden" name="next" id="next" value="/" />
+      <label for="username" data-i18n="username">Username</label>
+      <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false"
+        required autofocus />
+      <label for="password" data-i18n="password">Password</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required />
+      <button type="submit" data-i18n="submit">Sign in</button>
+    </form>
+
+    <p class="hint" data-i18n="hint">Session ends after 24 hours or on device restart.</p>
+
+    <div class="lang">
+      <button type="button" id="langToggle">Deutsch</button>
+    </div>
+  </main>
+
+  <script>
+    const STRINGS = {
+      en: {
+        title: 'AI-on-the-Edge Device · Login', subtitle: 'Sign in to continue', username: 'Username',
+        password: 'Password', submit: 'Sign in', error: 'Wrong username or password.',
+        hint: 'Session ends after 24 hours or on device restart.', toggle: 'Deutsch'
+      },
+      de: {
+        title: 'AI-on-the-Edge Device · Anmeldung', subtitle: 'Bitte anmelden, um fortzufahren', username: 'Benutzername',
+        password: 'Passwort', submit: 'Anmelden', error: 'Benutzername oder Passwort falsch.',
+        hint: 'Die Sitzung endet nach 24 Stunden oder bei einem Neustart des Geräts.', toggle: 'English'
+      }
+    };
+
+    function currentLanguage() {
+      let lang;
+      try { lang = localStorage.getItem('lang'); } catch (e) { }
+      if (lang !== 'de' && lang !== 'en') {
+        try { lang = document.cookie.match(/(?:^|; )lang=(de|en)/)?.[1]; } catch (e) { }
+      }
+      if (lang !== 'de' && lang !== 'en') {
+        lang = (navigator.language || 'en').toLowerCase().startsWith('de') ? 'de' : 'en';
+      }
+      return lang;
+    }
+
+    function applyLanguage(lang) {
+      const t = STRINGS[lang];
+      document.documentElement.lang = lang;
+      document.title = t.title;
+      document.querySelectorAll('[data-i18n]').forEach((el) => {
+        el.textContent = t[el.dataset.i18n];
+      });
+      document.getElementById('langToggle').textContent = t.toggle;
+      try { localStorage.setItem('lang', lang); } catch (e) { }
+      document.cookie = `lang=${lang};path=/;max-age=${60 * 60 * 24 * 400};SameSite=Lax`;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get('next') || '/';
+    if (next.startsWith('/') && !next.startsWith('//')) {
+      document.getElementById('next').value = next;
+    }
+    if (params.get('err')) {
+      document.getElementById('error').classList.add('visible');
+    }
+
+    let lang = currentLanguage();
+    applyLanguage(lang);
+    document.getElementById('langToggle').addEventListener('click', () => {
+      lang = lang === 'de' ? 'en' : 'de';
+      applyLanguage(lang);
+    });
+  </script>
+</body>
+
+</html>

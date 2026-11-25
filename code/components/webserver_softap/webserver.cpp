@@ -586,6 +586,9 @@ esp_err_t handler_main(httpd_req_t *req)
     if (strcmp(req->uri, "/") == 0) {
         filepath.append("/html/index.html");
     }
+    else if (strncmp(req->uri, "/login", 6) == 0 && (req->uri[6] == '\0' || req->uri[6] == '?')) {
+        filepath.append("/html/login.html");
+    }
     else {
         filepath.append("/html").append(req->uri);
 
@@ -679,7 +682,8 @@ httpd_handle_t startWebserver(void)
     config.core_id = 1;
     config.max_open_sockets = 5;    // With default value 7: Error "httpd_accept_conn: error in accept"
     // Max number of URI handlers.
-    // The code registers ~31 routes (incl. MQTT, InfluxDB, webhook, OTA pull).
+    // The code registers ~33 routes (incl. MQTT, InfluxDB, webhook, OTA pull,
+    // form based login and logout).
     // Too small a value makes the later registrations fail silently, which
     // drops e.g. the "/*" page handler and answers 404 for the whole WebUI.
     config.max_uri_handlers = 40;
@@ -726,18 +730,33 @@ void registerWebserverUri(httpd_handle_t server, const char *basePath)
     httpd_uri_t camuri = {};
     camuri.method = HTTP_GET;
 
+    // Form based login. GET /login is served by handler_main (html/login.html) without a session
+    camuri.uri = "/login";
+    camuri.handler = handleLoginPost;
+    camuri.method = HTTP_POST;
+    camuri.user_ctx = httpServerData;
+    httpd_register_uri_handler(server, &camuri);
+
+    camuri.uri = "/logout";
+    camuri.handler = handleLogoutGet;
+    camuri.method = HTTP_GET;
+    camuri.user_ctx = httpServerData;
+    httpd_register_uri_handler(server, &camuri);
+
+    camuri.method = HTTP_GET;
+
     camuri.uri = "/info";
-    camuri.handler = HTTP_AUTH_BASIC(handler_get_info);
+    camuri.handler = HTTP_AUTH(handler_get_info);
     camuri.user_ctx = httpServerData; // Pass server data as context
     httpd_register_uri_handler(server, &camuri);
 
     camuri.uri = "/img_tmp/*";
-    camuri.handler = HTTP_AUTH_BASIC(handler_img_tmp);
+    camuri.handler = HTTP_AUTH(handler_img_tmp);
     camuri.user_ctx = httpServerData; // Pass server data as context
     httpd_register_uri_handler(server, &camuri);
 
     camuri.uri = "/*";
-    camuri.handler = HTTP_AUTH_BASIC(handler_main);
+    camuri.handler = HTTP_AUTH(handler_main);
     camuri.user_ctx = httpServerData; // Pass server data as context
     httpd_register_uri_handler(server, &camuri);
 }

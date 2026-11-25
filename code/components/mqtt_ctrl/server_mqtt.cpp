@@ -944,7 +944,7 @@ void registerMqttUri(httpd_handle_t server)
     uri.method = HTTP_GET;
 
     uri.uri = "/mqtt";
-    uri.handler = HTTP_AUTH_BASIC(handler_mqtt);
+    uri.handler = HTTP_AUTH(handler_mqtt);
     uri.user_ctx = NULL;
     httpd_register_uri_handler(server, &uri);
 }

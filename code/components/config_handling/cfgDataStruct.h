@@ -481,6 +481,7 @@ struct CfgData {
     struct SectionWebUi {
         struct HttpAuth {
             int authMode = HTTP_AUTH_DISABLED;
+            bool basicAuth = false;
             std::string username = "aiote";
             std::string password = "";
         } httpAuth;
