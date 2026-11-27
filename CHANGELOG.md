@@ -1,5 +1,26 @@
 # Changelog
 
+## [18.4.0-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.3.3-comdataFork...v18.4.0-comdataFork) (2026-11-27)
+
+
+### Features
+
+* **ha:** log in to the device through the form login ([ce579cd](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/ce579cd22d7188378ddf55ee5d44c37bc21140c8))
+* **setup:** automatic exposure, rotation and ROI search in the wizard ([82dd5ad](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/82dd5ad96ce0c79964e3154e8ccb9a1f90d28e4b))
+
+
+### Bug Fixes
+
+* **setup:** load config before showing the reference image ([f1dfe7f](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/f1dfe7fd03ace84b750f81d2348bf44f306f1226))
+* **setup:** tune auto ROI search on real meter images ([29ddbc5](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/29ddbc5be7aa5d55d6e32f4403bcaa61ff8a0c7e))
+* **webui:** gate the dictionary by the active language ([f849ee8](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/f849ee8d4e876bfff415b0195fce53a044950d3f))
+* **webui:** switch the UI language without reloading the page ([b31bc24](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/b31bc24294870596819a71d23a16db933c7d446f))
+
+
+### Other Changes
+
+* keep Python bytecode out of the repo ([de7eabe](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/commit/de7eabed79f03b7937ef4b83e35ba9e53996986e))
+
 ## [18.3.3-comdataFork](https://github.com/comdata/AI-on-the-edge-device-comdata-fork/compare/v18.3.2-comdataFork...v18.3.3-comdataFork) (2026-11-24)
 
 
