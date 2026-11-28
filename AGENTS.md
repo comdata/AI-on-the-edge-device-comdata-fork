@@ -6,7 +6,7 @@
 |---|---|
 | Host | `10.0.1.20` (mDNS `watermeter.local`), hostname `watermeter` |
 | Board | ESP32CAM (AI-on-the-Edge, ESP32, 8 MB PSRAM, SD 4 GB) |
-| Firmware | `feat/cpu-dfs-80mhz-c8e1a1b` (seit 2026-11-28): Branch-Build mit dem DFS-Patch (siehe *CPU frequency / thermal*), sonst wie `develop-f849ee8` + 5 Commits. Kein Release-Tag, Auto-Updater lässt ihn in Ruhe. |
+| Firmware | `feat/setup-ota-polish-c07da4f` (seit 2026-11-28): Branch-Build mit CPU-DFS, Setup-Testablesen/Dialrichtung/Auto-Frame, OTA-Paketprüfung und HA-Update-Entität (siehe *Setup wizard helpers*, *OTA …*). Kein Release-Tag, Auto-Updater lässt ihn in Ruhe. |
 | WebUI | `http://10.0.1.20/` – responsive comdataFork-WebUI (`index.html` + Sidebar, `dashboard.html`, `edit_configuration.html`), plus lokale UI-Tweaks (Inline-Manifest, `aria-current`) |
 | Home Assistant | Wasserzähler hängt **nur** an der HA-API (REST, Push alle ~1 min), MQTT ist am Gerät aus und in HA vollständig entfernt (2026-11-15). |
 
