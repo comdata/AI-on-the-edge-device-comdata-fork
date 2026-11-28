@@ -205,7 +205,10 @@ creates `sensor.wasserzahler_zahlerstand` (m³, `total_increasing`), `_rohwert`,
 `camera.wasserzahler_kamera`, the buttons `_messung_starten` / `_gerat_neu_starten`
 (the reboot button is disabled by default) and `update.wasserzahler_firmware`,
 which reads the latest comdata release from GitHub (cached 6 h) and installs it
-with `POST /ota/pull` (no URL; the device resolves the asset itself).
+with `POST /ota/pull` (no URL; the device resolves the asset itself). It reads the
+tag from the `releases/latest` redirect, not the API (unauthenticated API calls
+hit the 60/h rate limit and failed with 403), and offers no update while the
+device runs a branch build — mirroring the device's own auto updater.
 
 * The per-sequence entities exist **per number sequence** the device reports: the first
   sequence keeps the plain names and unique_ids, further ones get a ` · <sequence>`
