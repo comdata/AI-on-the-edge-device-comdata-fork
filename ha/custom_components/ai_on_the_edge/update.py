@@ -68,6 +68,11 @@ class AiotFirmwareUpdate(UpdateEntity):
 
     @property
     def latest_version(self) -> str | None:
+        installed = self.installed_version
+        # Like the device's auto updater: a branch build cannot be compared with a
+        # release tag, so no update is offered (a release may even be older).
+        if installed and not (installed.startswith("v") and installed[1:2].isdigit()):
+            return installed
         return self._latest_version
 
     @property
