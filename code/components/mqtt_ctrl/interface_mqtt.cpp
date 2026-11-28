@@ -56,7 +56,7 @@ bool publishMqttData(std::string _key, std::string _content, int _qos, bool _ret
     }
 
     if (mqttState.failedOnCycle == getFlowCycleCounter()) { // Already a failed transmission in this cycle
-        return true;                                        // Fail quietly
+        return false;                                       // Fail quietly
     }
 
     startMqttClient(); // Restart client if not started yet/anymore
@@ -546,6 +546,7 @@ bool mqtt_handler_set_fallbackvalue(std::string _topic, char *_data, int _data_l
 void isConnectedState(void)
 {
     if (mqttState.mqttConnected) {
+        mqttState.failedOnCycle = -1; // Allow the new connection to publish its retained online status
         LogFile.writeToFile(ESP_LOG_INFO, TAG, "Connected to broker");
         publishMqttData(cfgDataPtr->mainTopic + MQTT_STATUS_TOPIC, MQTT_STATUS_ONLINE, 1, true); // Send MQTT birth message "online"
 
