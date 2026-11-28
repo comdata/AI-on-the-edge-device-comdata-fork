@@ -73,6 +73,12 @@ class AiotFirmwareUpdate(UpdateEntity):
     def available(self) -> bool:
         return self.coordinator.last_update_success
 
+    async def async_added_to_hass(self) -> None:
+        """Fetch the latest release once on setup instead of waiting for the first poll."""
+        await super().async_added_to_hass()
+        await self.async_update()
+        self.async_write_ha_state()
+
     async def async_update(self) -> None:
         now = datetime.now()
         if self._release_checked and now - self._release_checked < RELEASE_CACHE:
