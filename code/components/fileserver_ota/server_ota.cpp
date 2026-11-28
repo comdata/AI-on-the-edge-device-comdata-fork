@@ -5,6 +5,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
+#include <cstring>
+#include <algorithm>
 
 #include <freertos/task.h>
 
@@ -136,6 +138,73 @@ static std::string detectPackageType(const std::string &path)
     }
 
     return "";
+}
+
+
+// Reads the firmware version string from the staged binary's application descriptor
+static std::string readStagedFirmwareVersion(void)
+{
+    FILE *file = fopen(FILE_OTA_STAGED_FW, "rb");
+    if (!file) {
+        return "";
+    }
+
+    constexpr size_t headerSize = sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t);
+    uint8_t header[headerSize] = {0};
+    const size_t bytesRead = fread(header, 1, sizeof(header), file);
+    fclose(file);
+
+    if (bytesRead < headerSize) {
+        return "";
+    }
+
+    esp_app_desc_t appInfo;
+    memcpy(&appInfo, &header[sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t)], sizeof(appInfo));
+    if (appInfo.magic_word != ESP_APP_DESC_MAGIC_WORD) {
+        return "";
+    }
+
+    return std::string(appInfo.version, strnlen(appInfo.version, sizeof(appInfo.version)));
+}
+
+
+// Ensures the unzipped package is complete and that firmware and WebUI belong to the same build.
+// A ZIP that was already flashed but whose WebUI assets were not installed must not be marked valid.
+static bool validateStagedPackage(void)
+{
+    if (!fileExists(FILE_OTA_STAGED_FW) || !fileExists(DIR_OTA_STAGED_HTML "/index.html") ||
+        !fileExists(DIR_OTA_STAGED_HTML "/version.txt")) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Staged package incomplete: firmware.bin or WebUI files missing");
+        return false;
+    }
+
+    const std::string firmwareVersion = readStagedFirmwareVersion();
+    FILE *file = fopen(DIR_OTA_STAGED_HTML "/version.txt", "rb");
+    if (firmwareVersion.empty() || !file) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Staged package invalid: firmware or WebUI version unreadable");
+        if (file) {
+            fclose(file);
+        }
+        return false;
+    }
+
+    char htmlVersion[64] = {0};
+    const size_t bytesRead = fread(htmlVersion, 1, sizeof(htmlVersion) - 1, file);
+    fclose(file);
+    std::string htmlVersionStr(htmlVersion, bytesRead);
+    while (!htmlVersionStr.empty() && (htmlVersionStr.back() == '\n' || htmlVersionStr.back() == '\r' || htmlVersionStr.back() == ' ')) {
+        htmlVersionStr.pop_back();
+    }
+
+    // esp_app_desc_t.version is truncated to 31 characters, the version file carries the full tag
+    const size_t compareLength = std::min(firmwareVersion.size(), htmlVersionStr.size());
+    if (compareLength == 0 || firmwareVersion.compare(0, compareLength, htmlVersionStr, 0, compareLength) != 0) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG,
+                            "Staged package mismatch: firmware " + firmwareVersion + " vs WebUI " + htmlVersionStr);
+        return false;
+    }
+
+    return true;
 }
 
 
@@ -467,6 +536,12 @@ static bool processOtaUpdate()
     if (fileType == "ZIP") {
         LogFile.writeToFile(ESP_LOG_INFO, TAG, "Processing ZIP file...");
 
+        // Remove leftovers of an earlier attempt so a failed asset install cannot leak into this package
+        deleteFile(FILE_OTA_STAGED_FW);
+        deleteFile(FILE_OTA_STAGED_CONFIG_BACKUP_MANIFEST);
+        deleteAllFilesInDirectory(DIR_OTA_STAGED_HTML, true);
+        deleteAllFilesInDirectory(DIR_OTA_STAGED_CONFIG, true);
+
         if (!unzipFile(FILE_OTA_STAGED_PACKAGE, DIR_OTA_STAGED)) {
             LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Failed to unzip files");
             deleteAllFilesInDirectory(DIR_OTA_STAGED, true);
@@ -488,6 +563,12 @@ static bool processOtaUpdate()
         // Firmware + WebUI Flow
         if (!fileExists(FILE_OTA_STAGED_FW) || !dirExists(DIR_OTA_STAGED_HTML)) {
             LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Firmware.bin or HTML folder missing");
+            deleteAllFilesInDirectory(DIR_OTA_STAGED, true);
+            return false;
+        }
+
+        if (!validateStagedPackage()) {
+            LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Staged package rejected, firmware not flashed");
             deleteAllFilesInDirectory(DIR_OTA_STAGED, true);
             return false;
         }
@@ -867,6 +948,20 @@ static void taskOtaPull(void *pvParameter)
     setStatusLed(AP_OR_OTA, 1, true);
 
     otaPullError.clear();
+
+    // No URL given (e.g. Home Assistant): resolve the newest release for this board
+    if (url.empty()) {
+        std::string tag;
+        size_t assetSize = 0;
+        if (!otaGetLatestRelease(toLower(getBoardType()), tag, url, assetSize)) {
+            setOtaPullStatus("failed: no matching release asset");
+            otaPullActive = false;
+            vTaskDelete(NULL);
+            return;
+        }
+        LogFile.writeToFile(ESP_LOG_INFO, TAG, "OTA pull: Resolved latest release " + tag);
+    }
+
     if (!otaDownloadPackage(url)) {
         setOtaPullStatus("failed: " + (otaPullError.empty() ? std::string("download failed, see device log") : otaPullError));
         otaPullActive = false;
@@ -945,18 +1040,16 @@ esp_err_t handler_ota_pull_post(httpd_req_t *req)
     char value[600];
     std::string url;
 
-    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
-        httpd_query_key_value(query, "url", value, sizeof(value)) != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing parameter 'url'");
-        return ESP_FAIL;
-    }
+    // Without a URL the device resolves the latest release itself (used by Home Assistant)
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK &&
+        httpd_query_key_value(query, "url", value, sizeof(value)) == ESP_OK) {
+        url = urlDecode(value);
 
-    url = urlDecode(value);
-
-    // Only release downloads of this fork are fetched (no arbitrary URLs on the device)
-    if (url.rfind(OTA_RELEASE_DOWNLOAD_PREFIX, 0) != 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "URL not allowed. Only comdata release downloads are supported");
-        return ESP_FAIL;
+        // Only release downloads of this fork are fetched (no arbitrary URLs on the device)
+        if (url.rfind(OTA_RELEASE_DOWNLOAD_PREFIX, 0) != 0) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "URL not allowed. Only comdata release downloads are supported");
+            return ESP_FAIL;
+        }
     }
 
     if (otaPullActive) {

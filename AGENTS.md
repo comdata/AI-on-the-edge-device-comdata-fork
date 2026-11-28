@@ -98,6 +98,10 @@ longer has to travel through a browser.
   Only URLs starting with
   `https://github.com/comdata/AI-on-the-edge-device-comdata-fork/releases/download/`
   are accepted (the handler is not a general URL fetcher).
+* `POST /ota/pull` **without** a `url` resolves the latest release for the
+  board itself (`otaGetLatestRelease`, run inside the download task). The Home
+  Assistant integration uses this for its firmware update entity, so it needs
+  no GitHub API access of its own.
 * `GET /ota/pull` answers `idle`, `running`, `done` or `failed: …`; the WebUI
   page (`sd-card/html/sys_ota.html`) polls it while the device works.
 * The page resolves the release itself via
@@ -112,6 +116,13 @@ longer has to travel through a browser.
   because its version cannot be compared with a tag.
 * Rotation: the download task needs ~12 KB stack (TLS) and runs beside the
   httpd task, so the OTA handlers stay short and only trigger tasks.
+* `processOtaUpdate()` clears `html/`, `config/`, `firmware.bin` and
+  `meta.json` in `/.ota_staged` before unzipping, so leftovers of an earlier
+  attempt cannot leak into the new package. `validateStagedPackage()` then
+  requires `firmware.bin`, `html/index.html` and `html/version.txt`, and
+  compares the version in the binary's `esp_app_desc_t` (31 chars) with
+  `version.txt`; a mismatch rejects the package before flashing. This prevents
+  "new firmware, old WebUI" after a failed asset install.
 
 ## Release and OTA deployment
 
@@ -191,8 +202,10 @@ creates `sensor.wasserzahler_zahlerstand` (m³, `total_increasing`), `_rohwert`,
 `_wertestatus`, `_durchfluss`, `_letzte_messung`, `_firmware`, `_laufzeit`,
 `_wlan_signal`, `_cpu_temperatur`, `_prozessstatus`, `_prozesszustand`,
 `_prozessfehler`, `_messzyklen`, `binary_sensor.wasserzahler_problem`,
-`camera.wasserzahler_kamera` and the buttons `_messung_starten` / `_gerat_neu_starten`
-(the reboot button is disabled by default).
+`camera.wasserzahler_kamera`, the buttons `_messung_starten` / `_gerat_neu_starten`
+(the reboot button is disabled by default) and `update.wasserzahler_firmware`,
+which reads the latest comdata release from GitHub (cached 6 h) and installs it
+with `POST /ota/pull` (no URL; the device resolves the asset itself).
 
 * The per-sequence entities exist **per number sequence** the device reports: the first
   sequence keeps the plain names and unique_ids, further ones get a ` · <sequence>`
@@ -302,6 +315,25 @@ Measured on the device (2026-11-28): DFS never steps down while WiFi is connecte
 61–62 °C at 160 MHz *and* at fixed 80 MHz, because WiFi/camera/PSRAM dominate. Fixed 80 MHz only
 doubles `process_time` (17 s → 29 s). So CPU clock is **not** a thermal lever here; 160 MHz is
 the sane default.
+
+## Setup wizard helpers (2026-11-28)
+
+Besides auto exposure/rotation, `setup.html` now offers on its final step:
+
+* **Test reading** – saves nothing, calls `/cycle_start` and polls
+  `/process_data` until `timestamp_processed.main` changes (3 min timeout),
+  then shows `actual_value` and `value_status`. The parent page reads JSON
+  with `apiCall(..., {}, { parseType: 'json' })`; the default is text.
+* **Reading unit** – sets `postprocessing.sequence[0].decimalshift` (m³ = 0,
+  liters = 3) and posts the full config with `?reload=true`. `decimalshift` is
+  a unit scale, not a decimal count; the decimals come from the ROI layout.
+* **Invert dial direction** – appears when a test reading is lower than the
+  previous one and toggles `analog.*.roi[].ccw`. The direction cannot be read
+  from a single image, so this is offered as a reaction, never written silently.
+* **Auto-Frame** (`edit_reference.html`) sweeps `zoomfactor` (1000…2000) and a
+  3×3 `zoomoffsetx/zoomy` grid, scores each capture with
+  `AutoRoi.scoreFraming()` (centre detail minus border cut) and only fills the
+  form fields; *Save And Apply* persists them. 15 captures, ~1 min.
 
 ## Calibration notes (2026-11-14)
 
