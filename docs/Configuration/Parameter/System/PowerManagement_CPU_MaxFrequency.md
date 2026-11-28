@@ -20,8 +20,10 @@ Dynamic frequency scaling is enabled: the CPU runs at the configured maximum whi
 and drops to 80 MHz when idle. 80 MHz is the lower limit, because WiFi and the external PSRAM
 require at least 80 MHz. Choosing `80` disables the scaling and fixes the CPU at 80 MHz.
 
-A lower maximum reduces power consumption and the SoC temperature, but lengthens image
-processing (digit recognition takes roughly twice as long at 80 MHz).
+Measured on the ESP32CAM: the frequency does not influence the SoC temperature noticeably
+(61-62 °C at 80 MHz and at 160 MHz; WiFi, camera and PSRAM dominate). With WiFi connected the
+APB lock is held, so the scaling rarely drops to 80 MHz anyway. Processing time doubles at
+80 MHz (17 s -> 29 s per cycle).
 
 
 !!! Note

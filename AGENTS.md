@@ -293,11 +293,15 @@ Gotchas:
 
 `system.powermanagement.cpu.maxfrequency` accepts `80`, `160` and `240` (`configClass.cpp`,
 clamped 80…240). `setCPUFrequency()` (`code/components/misc_helper/system.cpp`) configures
-`esp_pm_configure` with that maximum and **min 80 MHz** — real DFS: full speed while busy,
-80 MHz when idle. 80 MHz is the floor because WiFi and the PSRAM need it; the old code only
-handled `240` and left PM unconfigured at 160 (so no scaling at all). Measured baseline
-before the change: 160 MHz fixed, 62 °C SoC. DFS is set before `initNetwork()`, as the
-comment in `app_main` requires.
+`esp_pm_configure` with that maximum and **min 80 MHz**, i.e. dynamic frequency scaling. 80 MHz
+is the floor because WiFi and the PSRAM need it; the old code only handled `240` and left PM
+unconfigured at 160.
+
+Measured on the device (2026-11-28): DFS never steps down while WiFi is connected (APB lock),
+`chip_frequency` stays at the maximum. The clock has almost no effect on the temperature —
+61–62 °C at 160 MHz *and* at fixed 80 MHz, because WiFi/camera/PSRAM dominate. Fixed 80 MHz only
+doubles `process_time` (17 s → 29 s). So CPU clock is **not** a thermal lever here; 160 MHz is
+the sane default.
 
 ## Calibration notes (2026-11-14)
 
