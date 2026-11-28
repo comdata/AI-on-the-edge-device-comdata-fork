@@ -25,8 +25,9 @@ from .sensor import device_info_for
 
 _LOGGER = logging.getLogger(__name__)
 
-RELEASE_API_URL = (
-    "https://api.github.com/repos/comdata/AI-on-the-edge-device-comdata-fork/releases/latest"
+# The releases page redirects to the newest tag and is not rate limited like the API
+RELEASE_LATEST_URL = (
+    "https://github.com/comdata/AI-on-the-edge-device-comdata-fork/releases/latest"
 )
 RELEASE_CACHE = timedelta(hours=6)
 INSTALL_TIMEOUT = timedelta(minutes=5)
@@ -86,19 +87,19 @@ class AiotFirmwareUpdate(UpdateEntity):
         session = async_get_clientsession(self.hass)
         try:
             async with session.get(
-                RELEASE_API_URL,
-                headers={"Accept": "application/vnd.github+json"},
+                RELEASE_LATEST_URL,
+                allow_redirects=False,
                 timeout=aiohttp.ClientTimeout(total=15),
             ) as response:
-                response.raise_for_status()
-                release = await response.json()
-        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as err:
+                location = response.headers.get("Location", "")
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             _LOGGER.debug("Cannot read the latest release: %s", err)
             return
-        tag = release.get("tag_name") if isinstance(release, dict) else None
-        if isinstance(tag, str) and tag:
+        tag = location.rstrip("/").rsplit("/", 1)[-1] if "/tag/" in location else None
+        if tag:
             self._latest_version = tag
             self._release_checked = now
+            _LOGGER.debug("Latest release: %s", tag)
 
     async def async_install(self, version: str | None, backup: bool, **kwargs) -> None:
         """Let the device download and flash the latest release, then reboot."""
