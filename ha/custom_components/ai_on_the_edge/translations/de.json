@@ -85,6 +85,9 @@
       "process_state": {"name": "Prozesszustand"},
       "process_error": {"name": "Prozessfehler"},
       "cycle_counter": {"name": "Messzyklen"}
+    },
+    "update": {
+      "firmware": {"name": "Firmware"}
     }
   },
   "services": {

@@ -29,6 +29,7 @@ PLATFORMS = [
     Platform.BUTTON,
     Platform.CAMERA,
     Platform.SENSOR,
+    Platform.UPDATE,
 ]
 
 SET_CONFIG_SCHEMA = vol.Schema(
