@@ -99,3 +99,23 @@ test('estimates a sloped digit row', () => {
   assert.ok(Math.abs(Math.abs(result.angle) - 5) <= 1.5, `angle ${result.angle}`);
   assert.ok(result.angle < 0, `expected clockwise content to need a negative rotation, got ${result.angle}`);
 });
+
+test('scores a well filled frame higher than a small or a cut off one', () => {
+  // Same meter face, drawn at three sizes: small, filling most of the frame, cut at the border.
+  const face = (size) =>
+    makeImage(640, 480, (setGray) => {
+      rect(setGray, 320 - size / 2, 240 - size / 2, size, size, 20);
+      rect(setGray, 320 - size / 2 + 20, 240 - size / 2 + 20, size - 40, size - 40, 200);
+      // Some dial-like detail inside the face so the score is not only its outline.
+      for (let i = 1; i < 4; i++) {
+        rect(setGray, 320 - size / 2 + i * (size / 4), 240 - size / 4, 8, size / 2, 40);
+      }
+    });
+
+  const small = AutoRoi.scoreFraming(face(120)).score;
+  const filling = AutoRoi.scoreFraming(face(420)).score;
+  const cut = AutoRoi.scoreFraming(face(700)).score;
+
+  assert.ok(filling > small, `filling ${filling} should beat small ${small}`);
+  assert.ok(filling > cut, `filling ${filling} should beat cut ${cut}`);
+});

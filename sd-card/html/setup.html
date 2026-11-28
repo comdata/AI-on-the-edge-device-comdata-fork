@@ -774,6 +774,32 @@
           </tr>
         </table>
 
+        <div class="card">
+          <div class="card-header"><span>Test Reading</span></div>
+          <div class="card-body">
+            <p>
+              Save the configuration first (step 4), then start one measurement here and review the recognized value. A wrong ROI or a wrong
+              dial direction shows up now instead of after the first automatic cycle.
+            </p>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <button id="testreading" class="button btn-action" type="button" onclick="startTestReading()">Start Test Reading</button>
+              <label style="display: flex; align-items: center; gap: 5px;">
+                <span>Reading unit</span>
+                <select id="decimalUnit">
+                  <option value="keep" selected>as configured</option>
+                  <option value="0">m³</option>
+                  <option value="3">liters</option>
+                </select>
+              </label>
+              <button class="button" type="button" onclick="applyDecimalUnit()">Apply Unit</button>
+            </div>
+            <div id="testReadingStatus" class="info-box" style="display: none; margin-top: 10px;"></div>
+            <div id="flipDialDirectionRow" style="display: none; margin-top: 10px;">
+              <button class="button" type="button" onclick="flipDialDirection()">Dials run counter-clockwise – invert dial direction</button>
+            </div>
+          </div>
+        </div>
+
         <div class="info-box">
           <p><b>INITIAL SETUP COMPLETED</b></p>
           <p>Congratulations! You have completed the initial setup and you are now ready to switch to the operational web interface!</p>
@@ -956,6 +982,115 @@
     window.clickAbort = () => SetupWizard.navigate(99);
     window.completeSetup = () => SetupWizard.finalizeSetup(false);
     window.abortSetup = () => SetupWizard.finalizeSetup(true);
+
+    // --- Test reading, decimal scaling and dial direction ----------------------
+    // Runs one cycle before the wizard is completed, so a wrong ROI or dial
+    // direction is visible in the setup instead of after the first automatic run.
+
+    let testReadingBusy = false;
+
+    function showTestReadingStatus(html, tone) {
+      const el = document.getElementById('testReadingStatus');
+      el.innerHTML = html;
+      el.style.display = 'block';
+      el.style.borderLeft = '4px solid ' + (tone === 'danger' ? 'var(--danger, #d9534f)' : tone === 'warning' ? 'var(--warning, #f0ad4e)' : 'var(--success, #5cb85c)');
+    }
+
+    async function waitForNewReading(previousTimestamp) {
+      const deadline = Date.now() + 180000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        const res = await apiCall('/process_data', {}, { parseType: 'json' });
+        if (!res.ok || !res.data) continue;
+        const timestamp = res.data.timestamp_processed && res.data.timestamp_processed.main;
+        if (timestamp && timestamp !== previousTimestamp) return res.data;
+      }
+      return null;
+    }
+
+    async function startTestReading() {
+      if (testReadingBusy) return;
+      testReadingBusy = true;
+      const button = document.getElementById('testreading');
+      button.disabled = true;
+      showTestReadingStatus('Starting measurement…', 'info');
+      try {
+        const before = await apiCall('/process_data', {}, { parseType: 'json' });
+        if (!before.ok) throw new Error('Device did not answer');
+        const previous = before.data && before.data.timestamp_processed ? before.data.timestamp_processed.main : '';
+        const started = await apiCall('/cycle_start');
+        if (!started.ok) throw new Error(started.data || 'Cycle start rejected');
+
+        const reading = await waitForNewReading(previous);
+        if (!reading) throw new Error('No reading within 3 minutes – check the log');
+
+        const value = reading.actual_value ? reading.actual_value.main : '?';
+        const valueStatus = reading.value_status ? reading.value_status.main : '?';
+        const valid = String(valueStatus).indexOf('000 Valid') === 0;
+        const lastRaw = sessionStorage.getItem('setupLastTestValue');
+        const lastValue = lastRaw === null ? NaN : Number(lastRaw);
+        let hint = '';
+        if (Number.isFinite(lastValue) && Number(value) < lastValue) {
+          hint = '<br />The value is lower than the previous test reading. If the meter only counts up, the analog dials probably run counter-clockwise.';
+          document.getElementById('flipDialDirectionRow').style.display = 'block';
+        }
+        sessionStorage.setItem('setupLastTestValue', value);
+        showTestReadingStatus(
+          '<b>Reading: ' + value + '</b><br />Status: ' + valueStatus + hint,
+          valid ? 'success' : 'danger',
+        );
+      } catch (error) {
+        showTestReadingStatus('Test reading failed: ' + (error.message || error), 'danger');
+      } finally {
+        testReadingBusy = false;
+        button.disabled = false;
+      }
+    }
+
+    async function applyDecimalUnit() {
+      const shift = document.getElementById('decimalUnit').value;
+      if (shift === 'keep') return;
+      try {
+        const current = await apiCall('/config', {}, { parseType: 'json' });
+        if (!current.ok || !current.data) throw new Error('Config not readable');
+        const config = current.data;
+        const sequences = config.postprocessing && config.postprocessing.sequence;
+        if (!sequences || !sequences.length) throw new Error('No number sequence configured');
+        sequences[0].decimalshift = parseInt(shift, 10);
+        const saved = await apiCall('/config?reload=true', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config),
+        });
+        if (!saved.ok) throw new Error(saved.data || 'Save failed');
+        showTestReadingStatus('Decimal scaling set to ' + shift + '. The next test reading uses it.', 'success');
+      } catch (error) {
+        showTestReadingStatus('Changing the decimal scaling failed: ' + (error.message || error), 'danger');
+      }
+    }
+
+    async function flipDialDirection() {
+      try {
+        const current = await apiCall('/config', {}, { parseType: 'json' });
+        if (!current.ok || !current.data) throw new Error('Config not readable');
+        const config = current.data;
+        const sequences = config.analog && config.analog.sequence;
+        if (!sequences) throw new Error('No analog ROI configured');
+        for (const sequence of sequences) {
+          for (const roi of sequence.roi || []) roi.ccw = !roi.ccw;
+        }
+        const saved = await apiCall('/config?reload=true', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config),
+        });
+        if (!saved.ok) throw new Error(saved.data || 'Save failed');
+        document.getElementById('flipDialDirectionRow').style.display = 'none';
+        showTestReadingStatus('Dial direction inverted. Start another test reading to verify.', 'warning');
+      } catch (error) {
+        showTestReadingStatus('Inverting the dial direction failed: ' + (error.message || error), 'danger');
+      }
+    }
 
     // GPIO Configuration Helper Functions
     function initGpioSection() {

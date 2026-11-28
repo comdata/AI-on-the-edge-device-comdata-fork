@@ -642,11 +642,39 @@
     return hits / samples;
   }
 
+  // Scores how well the meter fills the frame: detail in the centre counts,
+  // detail cut off at the border counts against, so a too small and an
+  // over-zoomed picture both score lower than a well framed one.
+  function scoreFraming(image) {
+    const gray = toGray(image, 320);
+    const { width: w, height: h, data } = gray;
+    let weighted = 0;
+    let border = 0;
+
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const i = y * w + x;
+        const g = Math.abs(data[i + 1] - data[i - 1]) + Math.abs(data[i + w] - data[i - w]);
+        if (g < 30) continue;
+
+        const nx = (2 * x) / (w - 1) - 1;
+        const ny = (2 * y) / (h - 1) - 1;
+        const radius = Math.hypot(nx, ny * 0.75);
+        weighted += g * Math.max(0.15, 1 - 0.7 * radius);
+
+        if (x < w * 0.04 || x > w * 0.96 || y < h * 0.04 || y > h * 0.96) border += g;
+      }
+    }
+
+    return { score: (weighted - 3 * border) / 1000, detail: weighted };
+  }
+
   const AutoRoi = {
     toGray,
     estimateSkew,
     detectDigitRois,
     detectAnalogRois,
+    scoreFraming,
     // Confidence needed before a proposal is offered without an explicit warning.
     threshold: 0.3,
   };

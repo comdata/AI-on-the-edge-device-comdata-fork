@@ -142,6 +142,7 @@
           <span>Reference Image</span>
           <div class="header-actions">
             <input id="autoadjust" class="button btn-action" type="button" value="Auto-Adjust & Save" onclick="autoAdjust()" />
+            <input id="autoframe" class="button" type="button" value="Auto-Frame" onclick="autoFrame()" />
             <input id="createreference" class="button" type="button" value="Create New Image" onclick="loadRawImage()" disabled />
             <input id="showactualimage" class="button" type="button" value="Show Actual Image" onclick="showReference(); loadConfigData();" disabled />
           </div>
@@ -961,9 +962,12 @@
         // The camera controls are disabled while a reference is shown, so build
         // the delta from the chosen values directly instead of FormData.
         jsonConfigModifiedDelta = {
+          ...jsonConfigModifiedDelta,
           takeimage: {
+            ...(jsonConfigModifiedDelta.takeimage || {}),
             flashlight: { flashintensity: parseInt(best.params.flashintensity, 10) },
             camera: {
+              ...((jsonConfigModifiedDelta.takeimage || {}).camera || {}),
               autoexposurelevel: parseInt(best.params.autoexposurelevel, 10),
               manualexposurevalue: parseInt(best.params.manualexposurevalue, 10),
             },
@@ -995,6 +999,81 @@
       } catch (error) {
         console.error('Auto-Adjust failed:', error);
         firework.launch(`Auto-Adjust failed: ${error.message || error}`, 'danger', 10000);
+      } finally {
+        btn.disabled = false;
+        status.style.display = 'none';
+      }
+    }
+
+    // Sweeps zoom and offset and keeps the setting in which the meter fills the
+    // frame best. Only proposes values: the user reviews and saves them.
+    async function autoFrame() {
+      if (!confirm('Auto-Frame takes up to 15 test pictures and sets zoom and offset. Continue?')) return;
+
+      const btn = document.getElementById('autoframe');
+      const status = document.getElementById('autoStatus');
+      btn.disabled = true;
+      status.style.display = 'block';
+
+      try {
+        const maxX = parseInt(document.getElementById('takeimage_camera_zoomoffsetx_value').max, 10) || 480;
+        const maxY = parseInt(document.getElementById('takeimage_camera_zoomoffsety_value').max, 10) || 360;
+        const zooms = [1000, 1200, 1400, 1600, 1800, 2000];
+        const offsets = [
+          [-0.5, -0.5], [0, -0.5], [0.5, -0.5],
+          [-0.5, 0], [0.5, 0],
+          [-0.5, 0.5], [0, 0.5], [0.5, 0.5],
+        ];
+        const total = zooms.length + offsets.length;
+        let index = 0;
+        let best = null;
+
+        const score = async (overrides) => {
+          const capture = await captureForAuto(overrides);
+          const pixels = await imageDataFromBlob(capture.blob);
+          return window.AutoRoi.scoreFraming(pixels).score;
+        };
+
+        for (const zoom of zooms) {
+          index++;
+          status.textContent = `Auto-Frame: test picture ${index}/${total} (zoom ${zoom / 1000}x) ...`;
+          const value = await score({ zoomfactor: String(zoom) });
+          if (!best || value > best.score) best = { score: value, zoom, x: 0, y: 0 };
+        }
+
+        for (const [fx, fy] of offsets) {
+          index++;
+          const x = Math.round(maxX * fx);
+          const y = Math.round(maxY * fy);
+          status.textContent = `Auto-Frame: test picture ${index}/${total} (offset ${x}/${y}) ...`;
+          const value = await score({ zoomfactor: String(best.zoom), zoomx: String(x), zoomy: String(y) });
+          if (value > best.score) best = { ...best, score: value, x, y };
+        }
+
+        setAutoField('takeimage_camera_zoomfactor_value', best.zoom);
+        setAutoField('takeimage_camera_zoomoffsetx_value', best.x);
+        setAutoField('takeimage_camera_zoomoffsety_value', best.y);
+        for (const id of ['takeimage_camera_zoomfactor_value', 'takeimage_camera_zoomoffsetx_value', 'takeimage_camera_zoomoffsety_value']) {
+          document.getElementById(id).dispatchEvent(new Event('change'));
+        }
+
+        jsonConfigModifiedDelta = jsonConfigModifiedDelta || {};
+        jsonConfigModifiedDelta.takeimage = jsonConfigModifiedDelta.takeimage || {};
+        jsonConfigModifiedDelta.takeimage.camera = {
+          ...(jsonConfigModifiedDelta.takeimage.camera || {}),
+          zoomfactor: best.zoom,
+          zoomx: best.x,
+          zoomy: best.y,
+        };
+
+        firework.launch(
+          `Auto-Frame: zoom ${best.zoom / 1000}x, offset ${best.x}/${best.y}. Review the image and press Save And Apply.`,
+          'success',
+          8000,
+        );
+      } catch (error) {
+        console.error('Auto-Frame failed:', error);
+        firework.launch(`Auto-Frame failed: ${error.message || error}`, 'danger', 10000);
       } finally {
         btn.disabled = false;
         status.style.display = 'none';
