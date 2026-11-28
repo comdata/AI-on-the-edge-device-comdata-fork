@@ -172,14 +172,15 @@ static std::string readStagedFirmwareVersion(void)
 // A ZIP that was already flashed but whose WebUI assets were not installed must not be marked valid.
 static bool validateStagedPackage(void)
 {
-    if (!fileExists(FILE_OTA_STAGED_FW) || !fileExists(DIR_OTA_STAGED_HTML "/index.html") ||
-        !fileExists(DIR_OTA_STAGED_HTML "/version.txt")) {
+    const std::string htmlIndex = std::string(DIR_OTA_STAGED_HTML) + "/index.html";
+    const std::string htmlVersionFile = std::string(DIR_OTA_STAGED_HTML) + "/version.txt";
+    if (!fileExists(FILE_OTA_STAGED_FW) || !fileExists(htmlIndex) || !fileExists(htmlVersionFile)) {
         LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Staged package incomplete: firmware.bin or WebUI files missing");
         return false;
     }
 
     const std::string firmwareVersion = readStagedFirmwareVersion();
-    FILE *file = fopen(DIR_OTA_STAGED_HTML "/version.txt", "rb");
+    FILE *file = fopen(htmlVersionFile.c_str(), "rb");
     if (firmwareVersion.empty() || !file) {
         LogFile.writeToFile(ESP_LOG_ERROR, TAG, "Staged package invalid: firmware or WebUI version unreadable");
         if (file) {
