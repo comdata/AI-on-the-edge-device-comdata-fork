@@ -289,6 +289,16 @@ Gotchas:
   Wörterbuch den Schlüssel nicht – und Schlüssel ohne Emoji halten, wenn das
   Markup keine Emojis mehr enthält.
 
+## CPU frequency / thermal
+
+`system.powermanagement.cpu.maxfrequency` accepts `80`, `160` and `240` (`configClass.cpp`,
+clamped 80…240). `setCPUFrequency()` (`code/components/misc_helper/system.cpp`) configures
+`esp_pm_configure` with that maximum and **min 80 MHz** — real DFS: full speed while busy,
+80 MHz when idle. 80 MHz is the floor because WiFi and the PSRAM need it; the old code only
+handled `240` and left PM unconfigured at 160 (so no scaling at all). Measured baseline
+before the change: 160 MHz fixed, 62 °C SoC. DFS is set before `initNetwork()`, as the
+comment in `app_main` requires.
+
 ## Calibration notes (2026-11-14)
 
 Camera sits farther from the meter than the original setup (digits ~20 px wide

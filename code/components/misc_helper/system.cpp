@@ -154,31 +154,30 @@ float getSOCTemperature()
 
 bool setCPUFrequency(void)
 {
-    esp_pm_config_t pm_config;
-
-    if (esp_pm_get_configuration(&pm_config) != ESP_OK) {
-        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "setCpuFrequency: Failed to read CPU frequency");
-        return false;
-    }
-
     const int cpuFrequency = ConfigClass::getInstance()->get()->sectionSystem.powerManagement.cpu.maxFrequency;
-    if (cpuFrequency == 160) { // 160 is the default
-        // No change needed
-    }
-    else if (cpuFrequency == 240) {
-        pm_config.max_freq_mhz = 240;
-        pm_config.min_freq_mhz = pm_config.max_freq_mhz;
-        if (esp_pm_configure(&pm_config) != ESP_OK) {
-            LogFile.writeToFile(ESP_LOG_ERROR, TAG, "setCpuFrequency: Failed to set requested CPU frequency");
-            return false;
-        }
-    }
-    else {
+    // Frequencies supported by the ESP32 power management (analog to ESP-IDF sdkconfig choices)
+    if (cpuFrequency != 80 && cpuFrequency != 160 && cpuFrequency != 240) {
         LogFile.writeToFile(ESP_LOG_ERROR, TAG, "setCpuFrequency: CPU frequency not supported: " + std::to_string(cpuFrequency));
         return false;
     }
 
-    if (esp_pm_get_configuration(&pm_config) == ESP_OK) {
+    esp_pm_config_t pm_config = {};
+    pm_config.max_freq_mhz = cpuFrequency;
+    // Dynamic frequency scaling: idle drops to 80 MHz (lower limit due to WiFi and external PSRAM)
+    pm_config.min_freq_mhz = (cpuFrequency > 80) ? 80 : cpuFrequency;
+    pm_config.light_sleep_enable = false;
+
+    if (esp_pm_configure(&pm_config) != ESP_OK) {
+        LogFile.writeToFile(ESP_LOG_ERROR, TAG, "setCpuFrequency: Failed to set requested CPU frequency");
+        return false;
+    }
+
+    if (pm_config.min_freq_mhz < pm_config.max_freq_mhz) {
+        LogFile.writeToFile(ESP_LOG_INFO, TAG,
+                            "CPU frequency: " + std::to_string(pm_config.min_freq_mhz) + " - " +
+                                std::to_string(pm_config.max_freq_mhz) + " MHz (dynamic frequency scaling)");
+    }
+    else {
         LogFile.writeToFile(ESP_LOG_INFO, TAG, "CPU frequency: " + std::to_string(pm_config.max_freq_mhz) + " MHz");
     }
 

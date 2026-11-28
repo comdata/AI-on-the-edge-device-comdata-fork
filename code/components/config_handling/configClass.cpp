@@ -804,7 +804,7 @@ void ConfigClass::parseSectionSystem()
 {
     cJSON *system = cJSON_GetObjectItem(cJsonObject, "system");
     auto &section = cfgDataTemp.sectionSystem;
-    cJsonUtils::parseIntClamped(system, {"powermanagement", "cpu", "maxfrequency"}, section.powerManagement.cpu.maxFrequency, 160, 240);
+    cJsonUtils::parseIntClamped(system, {"powermanagement", "cpu", "maxfrequency"}, section.powerManagement.cpu.maxFrequency, 80, 240);
     cJsonUtils::parseIntClamped(system, {"powermanagement", "wifi", "powermode"}, section.powerManagement.wifi.powerMode, 0,
                                 WIFI_POWERSAVING_MAX - 1);
 }

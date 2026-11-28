@@ -176,7 +176,7 @@ void migrateConfiguration(cJSON *cJsonObject)
         // ---------------------
         cJSON *system = cJSON_GetObjectItem(cJsonObject, "system");
         auto &section = ConfigClass::getInstance()->cfgTmp()->sectionSystem;
-        cJsonUtils::parseIntClamped(system, {"cpufrequency"}, section.powerManagement.cpu.maxFrequency, 160, 240);
+        cJsonUtils::parseIntClamped(system, {"cpufrequency"}, section.powerManagement.cpu.maxFrequency, 80, 240);
     }
 
 

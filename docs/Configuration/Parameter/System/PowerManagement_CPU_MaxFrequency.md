@@ -4,7 +4,7 @@
 |:---               |:---                 |:----
 | Parameter Name    | Frequency       | maxfrequency
 | Default Value     | `160`               | `160`
-| Input Options     | `160`<br>`240`      | `160`<br>`240` 
+| Input Options     | `80`<br>`160`<br>`240`      | `80`<br>`160`<br>`240` 
 | Unit              | Mhz                 | Mhz
 
 
@@ -14,7 +14,14 @@
 
 ## Description
 
-Set the CPU frequency (fixed)
+Set the maximum CPU frequency.
+
+Dynamic frequency scaling is enabled: the CPU runs at the configured maximum while it is busy
+and drops to 80 MHz when idle. 80 MHz is the lower limit, because WiFi and the external PSRAM
+require at least 80 MHz. Choosing `80` disables the scaling and fixes the CPU at 80 MHz.
+
+A lower maximum reduces power consumption and the SoC temperature, but lengthens image
+processing (digit recognition takes roughly twice as long at 80 MHz).
 
 
 !!! Note
